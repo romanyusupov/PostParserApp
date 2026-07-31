@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Настройки парсера</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='settings.css') }}"
+    >
+    <script
+      src="{{ url_for('static', filename='settings.js') }}"
+      defer
+    ></script>
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="page-header">
+        <div>
+          <div class="eyebrow">Тестовый серверный интерфейс</div>
+          <h1>Настройки парсера</h1>
+          <p class="page-description">
+            Shadow-версия не заменяет Google Apps Script и пока не
+            запускает парсеры.
+          </p>
+        </div>
+        <div class="revision-card" aria-live="polite">
+          <span>Текущая ревизия</span>
+          <strong id="revisionValue">—</strong>
+        </div>
+      </header>
+
+      <section class="toolbar" aria-label="Действия с настройками">
+        <button id="addGroupButton" class="button button-secondary" type="button">
+          Добавить группу
+        </button>
+        <div class="toolbar-actions">
+          <button id="reloadButton" class="button button-ghost" type="button">
+            Перезагрузить
+          </button>
+          <button id="saveButton" class="button button-primary" type="button">
+            Сохранить настройки
+          </button>
+        </div>
+      </section>
+
+      <div id="statusMessage" class="status" role="status" aria-live="polite">
+        Загружаем настройки…
+      </div>
+
+      <section id="emptyState" class="empty-state" hidden>
+        <h2>Групп пока нет</h2>
+        <p>Добавьте первую группу, чтобы подготовить настройки.</p>
+      </section>
+
+      <section
+        id="groupsContainer"
+        class="groups"
+        aria-label="Группы парсера"
+      ></section>
+    </main>
+  </body>
+</html>
