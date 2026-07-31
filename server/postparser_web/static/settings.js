@@ -184,6 +184,23 @@
     return textarea;
   }
 
+  function prepareGroupsForSave() {
+    return groups.map(function (group) {
+      return Object.assign({}, group, {
+        advertisingTypes: group.advertisingTypes.map(
+          function (advertisingType) {
+            return Object.assign({}, advertisingType, {
+              videoWords:
+                group.network === "telegram"
+                  ? []
+                  : advertisingType.videoWords,
+            });
+          }
+        ),
+      });
+    });
+  }
+
   function renderAdvertisingType(group, groupIndex, typeIndex) {
     const advertisingType = group.advertisingTypes[typeIndex];
     const card = createElement("article", "type-card");
@@ -233,19 +250,25 @@
         )
       )
     );
-    wordsGrid.appendChild(
-      createField(
-        "Ключевые слова видео",
-        createWordsTextarea(
-          advertisingType.videoWords,
-          "Одно слово или фраза на строке",
-          function (value) {
-            groups[groupIndex].advertisingTypes[typeIndex].videoWords =
-              value;
-          }
+
+    const showsVideoWords = ["vk", "instagram"].includes(group.network);
+
+    if (showsVideoWords) {
+      wordsGrid.appendChild(
+        createField(
+          "Ключевые слова видео",
+          createWordsTextarea(
+            advertisingType.videoWords,
+            "Одно слово или фраза на строке",
+            function (value) {
+              groups[groupIndex].advertisingTypes[typeIndex].videoWords =
+                value;
+            }
+          )
         )
-      )
-    );
+      );
+    }
+
     card.appendChild(wordsGrid);
 
     return card;
@@ -296,6 +319,16 @@
         "Социальная сеть",
         createNetworkSelect(group.network, function (value) {
           groups[groupIndex].network = value;
+
+          if (value === "telegram") {
+            groups[groupIndex].advertisingTypes.forEach(
+              function (advertisingType) {
+                advertisingType.videoWords = [];
+              }
+            );
+          }
+
+          renderGroups();
         })
       )
     );
@@ -428,7 +461,7 @@
         body: JSON.stringify({
           revision: revision,
           settings: {
-            groups: groups,
+            groups: prepareGroupsForSave(),
           },
         }),
       });

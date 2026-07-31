@@ -37,6 +37,14 @@ class SettingsPageTestCase(unittest.TestCase):
     def get_page(self):
         return self.client.get("/shadow/settings")
 
+    def get_script(self):
+        response = self.client.get("/static/settings.js")
+        try:
+            self.assertEqual(response.status_code, 200)
+            return response.get_data(as_text=True)
+        finally:
+            response.close()
+
     def test_settings_page_returns_ok(self):
         response = self.get_page()
 
@@ -85,6 +93,31 @@ class SettingsPageTestCase(unittest.TestCase):
         self.assertTrue(
             all(script.get("src") for script in parser.script_tags)
         )
+
+    def test_video_words_field_is_available_for_vk_and_instagram(self):
+        script = self.get_script()
+
+        self.assertIn(
+            '["vk", "instagram"].includes(group.network)',
+            script,
+        )
+        self.assertIn('if (showsVideoWords) {', script)
+        self.assertIn('"Ключевые слова видео"', script)
+
+    def test_video_words_field_is_hidden_when_switching_to_telegram(self):
+        script = self.get_script()
+
+        self.assertIn('if (value === "telegram") {', script)
+        self.assertIn("advertisingType.videoWords = [];", script)
+        self.assertIn("renderGroups();", script)
+
+    def test_telegram_video_words_are_empty_when_form_is_collected(self):
+        script = self.get_script()
+
+        self.assertIn("function prepareGroupsForSave()", script)
+        self.assertIn('group.network === "telegram"', script)
+        self.assertIn("? []", script)
+        self.assertIn("groups: prepareGroupsForSave()", script)
 
 
 if __name__ == "__main__":
