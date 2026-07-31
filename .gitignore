@@ -1,0 +1,46 @@
+# Секреты и переменные окружения
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Telegram
+*.session
+*.session-journal
+
+# Instagram
+instagram_token.json
+instagram_tokens/
+instagram_token*.json
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Скачанные медиа и данные
+api_media/
+media/
+downloads/
+*.csv
+*.xlsx
+
+# Логи
+*.log
+
+# Редакторы
+.vscode/
+.idea/
+
+# Системные файлы
+.DS_Store
+Thumbs.db
+
+# Резервные копии
+*_backup.py
+*_before_*.py
+*.bak
