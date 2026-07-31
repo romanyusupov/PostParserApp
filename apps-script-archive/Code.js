@@ -1290,8 +1290,6 @@ function getVkWallPostsForPeriod(ownerId, token, dateRange) {
       }
     }
 
-    offset += pageItems.length;
-
     /*
      * Переходим к следующему диапазону стены
      * фиксированным шагом.
