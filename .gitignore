@@ -44,3 +44,5 @@ Thumbs.db
 *_backup.py
 *_before_*.py
 *.bak
+# Временные приватные файлы с VPS
+server/_import/
