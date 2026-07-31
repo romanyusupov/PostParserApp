@@ -1,0 +1,1609 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <base target="_top" />
+
+    <meta charset="UTF-8" />
+
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Настройки анализа публикаций</title>
+
+    <style>
+      :root {
+        --background: #f3f6fa;
+        --card: #ffffff;
+        --border: #dfe5ec;
+        --text: #1f2937;
+        --muted: #667085;
+        --primary: #2688eb;
+        --primary-hover: #1f78d1;
+        --success: #16804d;
+        --error: #c63737;
+        --disabled: #aeb8c4;
+        --danger: #d64545;
+        --danger-background: #fff2f2;
+        --tab-background: #e8eef6;
+        --telegram: #239ed9;
+        --instagram: #d62976;
+        --vk: #447bba;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 28px 16px 50px;
+        font-family: Arial, sans-serif;
+        color: var(--text);
+        background: var(--background);
+      }
+
+      .container {
+        max-width: 1220px;
+        margin: 0 auto;
+      }
+
+      .page-header {
+        margin-bottom: 22px;
+      }
+
+      .page-header h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+        line-height: 1.2;
+      }
+
+      .page-header p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .table-link-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        margin-bottom: 20px;
+        padding: 18px 22px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--card);
+        box-shadow: 0 5px 18px rgba(20, 32, 50, 0.05);
+      }
+
+      .table-link-title {
+        margin-bottom: 5px;
+        font-weight: 700;
+      }
+
+      .table-link-description {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .table-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 190px;
+        min-height: 42px;
+        padding: 10px 17px;
+        border: 1px solid var(--primary);
+        border-radius: 9px;
+        color: var(--primary);
+        font-weight: 700;
+        text-decoration: none;
+        background: white;
+      }
+
+      .table-link:hover {
+        background: #f1f7fe;
+      }
+
+      .group-tabs-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+
+      .group-tabs {
+        display: flex;
+        flex: 1;
+        gap: 8px;
+        overflow-x: auto;
+        padding: 3px 0;
+      }
+
+      .group-tab {
+        position: relative;
+        min-width: 135px;
+        max-width: 240px;
+        min-height: 44px;
+        padding: 9px 16px 9px 30px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+        color: var(--text);
+        font: inherit;
+        font-weight: 700;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        background: var(--tab-background);
+        cursor: pointer;
+      }
+
+      .group-tab::before {
+        content: '';
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        transform: translateY(-50%);
+        background: var(--vk);
+      }
+
+      .group-tab.telegram::before {
+        background: var(--telegram);
+      }
+
+      .group-tab.instagram::before {
+        background: var(--instagram);
+      }
+
+      .group-tab.active {
+        color: white;
+        border-color: var(--primary);
+        background: var(--primary);
+      }
+
+      .group-tab.active::before {
+        background: white;
+      }
+
+      .add-group-button {
+        min-width: 165px;
+        min-height: 42px;
+        padding: 9px 15px;
+        border: 1px solid var(--primary);
+        border-radius: 9px;
+        color: var(--primary);
+        font: inherit;
+        font-weight: 700;
+        background: white;
+        cursor: pointer;
+      }
+
+      .add-group-button:hover:not(:disabled) {
+        background: #f1f7fe;
+      }
+
+      .card {
+        margin-bottom: 20px;
+        padding: 22px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--card);
+        box-shadow: 0 5px 18px rgba(20, 32, 50, 0.05);
+      }
+
+      .card-title {
+        margin: 0;
+        font-size: 20px;
+      }
+
+      .card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+
+      .group-fields {
+        display: grid;
+        grid-template-columns:
+          minmax(170px, 0.55fr)
+          minmax(220px, 0.8fr)
+          minmax(340px, 1.4fr);
+        gap: 18px;
+      }
+
+      .date-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+        margin-top: 18px;
+      }
+
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .field label {
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      input,
+      select {
+        width: 100%;
+        min-height: 44px;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        color: var(--text);
+        font: inherit;
+        background: white;
+        outline: none;
+      }
+
+      input:focus,
+      select:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(38, 136, 235, 0.12);
+      }
+
+      .network-note {
+        margin-top: 14px;
+        padding: 11px 13px;
+        border-radius: 9px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+        background: #f5f7fa;
+      }
+
+      .network-note.telegram {
+        color: #12648c;
+        background: #eef9fe;
+      }
+
+      .network-note.instagram {
+        color: #8f1b56;
+        background: #fff1f7;
+      }
+
+      .delete-group-button {
+        min-width: 150px;
+        min-height: 40px;
+        padding: 9px 15px;
+        border: 1px solid #f0caca;
+        border-radius: 9px;
+        color: var(--danger);
+        font: inherit;
+        font-weight: 700;
+        background: var(--danger-background);
+        cursor: pointer;
+      }
+
+      .add-type-button {
+        min-width: 165px;
+        min-height: 40px;
+        padding: 9px 15px;
+        border: 1px solid var(--primary);
+        border-radius: 9px;
+        color: var(--primary);
+        font: inherit;
+        font-weight: 700;
+        background: white;
+        cursor: pointer;
+      }
+
+      .rules-header,
+      .rule-row {
+        display: grid;
+        grid-template-columns:
+          minmax(190px, 0.85fr)
+          minmax(270px, 1.25fr)
+          minmax(270px, 1.25fr)
+          48px;
+        gap: 12px;
+        align-items: start;
+      }
+
+      .rules-header.telegram,
+      .rule-row.telegram {
+        grid-template-columns:
+          minmax(220px, 0.9fr)
+          minmax(420px, 2fr)
+          48px;
+      }
+
+      .rules-header {
+        margin-bottom: 10px;
+        padding: 0 12px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .rule-row {
+        margin-bottom: 12px;
+        padding: 14px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: #fafbfd;
+      }
+
+      .type-input {
+        font-weight: 700;
+      }
+
+      .input-caption {
+        display: none;
+        margin-bottom: 5px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .hint {
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .delete-type-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
+        padding: 0;
+        border: 1px solid #f0caca;
+        border-radius: 9px;
+        color: var(--danger);
+        font-size: 21px;
+        background: var(--danger-background);
+        cursor: pointer;
+      }
+
+      .empty-message {
+        padding: 24px;
+        border: 1px dashed var(--border);
+        border-radius: 12px;
+        text-align: center;
+        color: var(--muted);
+      }
+
+      .actions {
+        position: sticky;
+        bottom: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 14px 16px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.96);
+        box-shadow: 0 8px 24px rgba(20, 32, 50, 0.12);
+        backdrop-filter: blur(8px);
+      }
+
+      .status {
+        min-height: 20px;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .status.loading {
+        color: var(--muted);
+      }
+
+      .status.success {
+        color: var(--success);
+      }
+
+      .status.error {
+        color: var(--error);
+      }
+
+      .action-buttons {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-shrink: 0;
+      }
+
+      .parse-button {
+        min-width: 205px;
+        min-height: 44px;
+        padding: 11px 20px;
+        border: 1px solid var(--primary);
+        border-radius: 10px;
+        color: var(--primary);
+        font: inherit;
+        font-weight: 700;
+        background: white;
+        cursor: pointer;
+      }
+
+      .save-button {
+        min-width: 150px;
+        min-height: 44px;
+        padding: 11px 20px;
+        border: 0;
+        border-radius: 10px;
+        color: white;
+        font: inherit;
+        font-weight: 700;
+        background: var(--primary);
+        cursor: pointer;
+      }
+
+      button:disabled,
+      input:disabled,
+      select:disabled {
+        cursor: default;
+        opacity: 0.7;
+      }
+
+      button:disabled {
+        color: #eef1f5;
+        border-color: var(--disabled);
+        background: var(--disabled);
+      }
+
+      .loading-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(243, 246, 250, 0.88);
+      }
+
+      .loading-box {
+        padding: 20px 24px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        font-weight: 700;
+        background: white;
+        box-shadow: 0 8px 28px rgba(20, 32, 50, 0.12);
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      @media (max-width: 950px) {
+        .group-fields,
+        .date-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .rules-header {
+          display: none;
+        }
+
+        .rule-row,
+        .rule-row.telegram {
+          grid-template-columns: 1fr;
+        }
+
+        .input-caption {
+          display: block;
+        }
+
+        .delete-type-button {
+          width: 100%;
+        }
+
+        .actions {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .action-buttons {
+          width: 100%;
+          justify-content: flex-end;
+        }
+      }
+
+      @media (max-width: 650px) {
+        body {
+          padding: 18px 10px 34px;
+        }
+
+        .card {
+          padding: 16px;
+        }
+
+        .table-link-card,
+        .card-header,
+        .group-tabs-wrapper {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .table-link,
+        .add-group-button,
+        .add-type-button,
+        .delete-group-button {
+          width: 100%;
+        }
+
+        .action-buttons {
+          flex-direction: column;
+        }
+
+        .parse-button,
+        .save-button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="loadingOverlay" class="loading-overlay">
+      <div class="loading-box">Загружаем настройки…</div>
+    </div>
+
+    <main class="container">
+      <header class="page-header">
+        <h1>Настройки анализа публикаций</h1>
+
+        <p>
+          Для каждой вкладки можно выбрать ВКонтакте, Telegram или Instagram, указать период и
+          собственные правила определения рекламы.
+        </p>
+      </header>
+
+      <section class="table-link-card">
+        <div>
+          <div class="table-link-title">Google Таблица с результатами</div>
+
+          <div id="spreadsheetDescription" class="table-link-description">Ссылка загружается…</div>
+        </div>
+
+        <a id="spreadsheetLink" class="table-link" href="#" target="_blank"> Открыть таблицу </a>
+      </section>
+
+      <div class="group-tabs-wrapper">
+        <div id="groupTabs" class="group-tabs"></div>
+
+        <button id="addGroupButton" class="add-group-button" type="button">
+          + Добавить группу
+        </button>
+      </div>
+
+      <section class="card">
+        <div class="card-header">
+          <h2 class="card-title">Настройки группы</h2>
+
+          <button id="deleteGroupButton" class="delete-group-button" type="button">
+            Удалить группу
+          </button>
+        </div>
+
+        <div class="group-fields">
+          <div class="field">
+            <label for="network"> Социальная сеть </label>
+
+            <select id="network">
+              <option value="vk">ВКонтакте</option>
+
+              <option value="telegram">Telegram</option>
+
+              <option value="instagram">Instagram</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="groupName"> Название группы </label>
+
+            <input id="groupName" type="text" placeholder="Название листа в таблице" />
+          </div>
+
+          <div class="field">
+            <label id="groupUrlLabel" for="groupUrl"> URL сообщества </label>
+
+            <input id="groupUrl" type="url" placeholder="https://vk.ru/..." />
+          </div>
+        </div>
+
+        <div class="date-grid">
+          <div class="field">
+            <label for="dateStart"> Дата начала </label>
+
+            <input id="dateStart" type="date" />
+          </div>
+
+          <div class="field">
+            <label for="dateEnd"> Дата окончания </label>
+
+            <input id="dateEnd" type="date" />
+          </div>
+        </div>
+
+        <div id="networkNote" class="network-note"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <h2 class="card-title">Правила определения рекламы</h2>
+
+          <button id="addTypeButton" class="add-type-button" type="button">+ Добавить тип</button>
+        </div>
+
+        <div id="rulesHeader" class="rules-header">
+          <div>Название типа рекламы</div>
+          <div>Поиск в тексте поста</div>
+          <div id="videoHeader">Поиск в описании видео</div>
+          <div></div>
+        </div>
+
+        <div id="rulesContainer"></div>
+      </section>
+
+      <div class="actions">
+        <div id="status" class="status">Настройки не изменены.</div>
+
+        <div class="action-buttons">
+          <button id="parseButton" class="parse-button" type="button">Запустить эту группу</button>
+
+          <button id="saveButton" class="save-button" type="button" disabled>Сохранить</button>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      const groupTabs = document.getElementById('groupTabs');
+
+      const addGroupButton = document.getElementById('addGroupButton');
+
+      const deleteGroupButton = document.getElementById('deleteGroupButton');
+
+      const networkInput = document.getElementById('network');
+
+      const groupNameInput = document.getElementById('groupName');
+
+      const groupUrlInput = document.getElementById('groupUrl');
+
+      const groupUrlLabel = document.getElementById('groupUrlLabel');
+
+      const dateStartInput = document.getElementById('dateStart');
+
+      const dateEndInput = document.getElementById('dateEnd');
+
+      const networkNote = document.getElementById('networkNote');
+
+      const addTypeButton = document.getElementById('addTypeButton');
+
+      const rulesHeader = document.getElementById('rulesHeader');
+
+      const videoHeader = document.getElementById('videoHeader');
+
+      const rulesContainer = document.getElementById('rulesContainer');
+
+      const parseButton = document.getElementById('parseButton');
+
+      const saveButton = document.getElementById('saveButton');
+
+      const statusBox = document.getElementById('status');
+
+      const loadingOverlay = document.getElementById('loadingOverlay');
+
+      const spreadsheetLink = document.getElementById('spreadsheetLink');
+
+      const spreadsheetDescription = document.getElementById('spreadsheetDescription');
+
+      let groups = [];
+      let activeGroupIndex = 0;
+
+      let originalSettingsJson = '';
+
+      let isSaving = false;
+      let isParsing = false;
+
+      function loadSettings() {
+        google.script.run
+          .withSuccessHandler(handleSettingsLoaded)
+          .withFailureHandler(handleLoadError)
+          .getParserSettings();
+      }
+
+      function handleSettingsLoaded(settings) {
+        groups = prepareGroups(settings && Array.isArray(settings.groups) ? settings.groups : []);
+
+        if (groups.length === 0) {
+          groups.push(createNewGroup());
+        }
+
+        const spreadsheetUrl = String(
+          settings && settings.spreadsheetUrl ? settings.spreadsheetUrl : '',
+        );
+
+        const spreadsheetName = String(
+          settings && settings.spreadsheetName ? settings.spreadsheetName : 'Google Таблица',
+        );
+
+        if (spreadsheetUrl) {
+          spreadsheetLink.href = spreadsheetUrl;
+
+          spreadsheetDescription.textContent = spreadsheetName;
+        } else {
+          spreadsheetLink.style.display = 'none';
+
+          spreadsheetDescription.textContent = 'Не удалось получить ссылку на таблицу.';
+        }
+
+        activeGroupIndex = 0;
+
+        renderAll();
+
+        originalSettingsJson = serializeSettings();
+
+        setChangedState(false);
+
+        loadingOverlay.classList.add('hidden');
+      }
+
+      function handleLoadError(error) {
+        loadingOverlay.classList.add('hidden');
+
+        setStatus('Ошибка загрузки настроек: ' + getErrorMessage(error), 'error');
+      }
+
+      function prepareGroups(sourceGroups) {
+        return sourceGroups.map(function (group, index) {
+          const network = normalizeNetwork(group.network);
+
+          return {
+            id: String(group.id || createGroupId()),
+
+            name: String(group.name || 'Группа ' + (index + 1)),
+
+            network: network,
+
+            url: String(group.url || ''),
+
+            dateStart: String(group.dateStart || ''),
+
+            dateEnd: String(group.dateEnd || ''),
+
+            advertisingTypes: Array.isArray(group.advertisingTypes)
+              ? group.advertisingTypes.map(function (type) {
+                  return {
+                    type: String(type.type || ''),
+
+                    postWords: Array.isArray(type.postWords) ? type.postWords : [],
+
+                    videoWords: Array.isArray(type.videoWords) ? type.videoWords : [],
+                  };
+                })
+              : [],
+          };
+        });
+      }
+
+      function normalizeNetwork(value) {
+        const network = String(value || '')
+          .trim()
+          .toLowerCase();
+
+        if (network === 'telegram' || network === 'tg') {
+          return 'telegram';
+        }
+
+        if (network === 'instagram' || network === 'ig') {
+          return 'instagram';
+        }
+
+        return 'vk';
+      }
+
+      function createGroupId() {
+        return 'group_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+      }
+
+      function createNewGroup() {
+        return {
+          id: createGroupId(),
+
+          name: 'Группа ' + (groups.length + 1),
+
+          network: 'vk',
+          url: '',
+          dateStart: '',
+          dateEnd: '',
+
+          advertisingTypes: createDefaultAdvertisingTypes(),
+        };
+      }
+
+      function createDefaultAdvertisingTypes() {
+        return [
+          {
+            type: 'Стройность.Гайд',
+            postWords: ['слово стройность'],
+            videoWords: ['стройность'],
+          },
+
+          {
+            type: 'Деталь.Уважение к М',
+            postWords: ['слово деталь'],
+            videoWords: ['деталь'],
+          },
+
+          {
+            type: 'Шаг.Нежность к Ж',
+            postWords: ['слово шаг'],
+            videoWords: ['шаг'],
+          },
+
+          {
+            type: 'Тест.Тест нехваток',
+            postWords: ['слово тест'],
+            videoWords: ['тест'],
+          },
+
+          {
+            type: 'Любовь.Истории',
+            postWords: ['слово любовь'],
+            videoWords: ['любовь'],
+          },
+
+          {
+            type: 'Видео',
+            postWords: ['слово видео'],
+            videoWords: ['видео'],
+          },
+
+          {
+            type: 'Прямая реклама',
+            postWords: ['clck'],
+            videoWords: [],
+          },
+        ];
+      }
+
+      function renderAll() {
+        renderGroupTabs();
+        renderActiveGroup();
+      }
+
+      function renderGroupTabs() {
+        groupTabs.innerHTML = '';
+
+        groups.forEach(function (group, index) {
+          const button = document.createElement('button');
+
+          button.type = 'button';
+
+          button.className =
+            'group-tab ' + group.network + (index === activeGroupIndex ? ' active' : '');
+
+          button.textContent = group.name || 'Группа ' + (index + 1);
+
+          button.title = button.textContent;
+
+          button.addEventListener('click', function () {
+            switchGroup(index);
+          });
+
+          groupTabs.appendChild(button);
+        });
+      }
+
+      function renderActiveGroup() {
+        const group = groups[activeGroupIndex];
+
+        if (!group) {
+          return;
+        }
+
+        networkInput.value = group.network;
+
+        groupNameInput.value = group.name;
+
+        groupUrlInput.value = group.url;
+
+        dateStartInput.value = group.dateStart;
+
+        dateEndInput.value = group.dateEnd;
+
+        updateNetworkInterface(group.network);
+
+        renderAdvertisingRules(group.advertisingTypes, group.network);
+
+        deleteGroupButton.disabled = groups.length <= 1 || isSaving || isParsing;
+      }
+
+      function updateNetworkInterface(network) {
+        const isTelegram = network === 'telegram';
+
+        const isInstagram = network === 'instagram';
+
+        const isTextOnlyNetwork = isTelegram || isInstagram;
+
+        groupUrlLabel.textContent = isTelegram
+          ? 'URL Telegram-канала'
+          : isInstagram
+            ? 'URL или имя Instagram-аккаунта'
+            : 'URL сообщества ВКонтакте';
+
+        groupUrlInput.placeholder = isTelegram
+          ? 'https://t.me/название_канала'
+          : isInstagram
+            ? 'https://www.instagram.com/имя_аккаунта/'
+            : 'https://vk.ru/название_группы';
+
+        rulesHeader.classList.toggle('telegram', isTextOnlyNetwork);
+
+        videoHeader.classList.toggle('hidden', isTextOnlyNetwork);
+
+        networkNote.className =
+          'network-note' + (isTelegram ? ' telegram' : isInstagram ? ' instagram' : '');
+
+        networkNote.textContent = isTelegram
+          ? 'Telegram: реклама определяется только по тексту публикации. Для запуска обязательно укажите обе даты.'
+          : isInstagram
+            ? 'Instagram: реклама определяется по тексту публикации. Для запуска обязательно укажите обе даты. Парсер использует подключённый к серверу профессиональный аккаунт.'
+            : 'ВКонтакте: правила могут отдельно искать фразы в тексте поста и в доступном описании видео.';
+      }
+
+      function renderAdvertisingRules(types, network) {
+        rulesContainer.innerHTML = '';
+
+        const isTelegram = network === 'telegram';
+
+        const isInstagram = network === 'instagram';
+
+        const isTextOnlyNetwork = isTelegram || isInstagram;
+
+        if (types.length === 0) {
+          const empty = document.createElement('div');
+
+          empty.className = 'empty-message';
+
+          empty.textContent = 'Типы рекламы не добавлены.';
+
+          rulesContainer.appendChild(empty);
+
+          return;
+        }
+
+        types.forEach(function (rule, index) {
+          const row = document.createElement('div');
+
+          row.className = 'rule-row' + (isTextOnlyNetwork ? ' telegram' : '');
+
+          row.appendChild(createRuleInput('Название типа рекламы', rule.type, index, 'type', true));
+
+          row.appendChild(
+            createRuleInput(
+              'Поиск в тексте поста',
+              rule.postWords.join(', '),
+              index,
+              'post',
+              false,
+            ),
+          );
+
+          if (!isTextOnlyNetwork) {
+            row.appendChild(
+              createRuleInput(
+                'Поиск в описании видео',
+                rule.videoWords.join(', '),
+                index,
+                'video',
+                false,
+              ),
+            );
+          }
+
+          const deleteButton = document.createElement('button');
+
+          deleteButton.type = 'button';
+
+          deleteButton.className = 'delete-type-button';
+
+          deleteButton.textContent = '×';
+
+          deleteButton.title = 'Удалить тип';
+
+          deleteButton.addEventListener('click', function () {
+            deleteAdvertisingType(index);
+          });
+
+          row.appendChild(deleteButton);
+
+          rulesContainer.appendChild(row);
+        });
+      }
+
+      function createRuleInput(captionText, value, index, source, bold) {
+        const wrapper = document.createElement('div');
+
+        const caption = document.createElement('div');
+
+        caption.className = 'input-caption';
+
+        caption.textContent = captionText;
+
+        const input = document.createElement('input');
+
+        input.type = 'text';
+        input.value = value;
+
+        input.dataset.ruleIndex = String(index);
+
+        input.dataset.ruleSource = source;
+
+        if (bold) {
+          input.className = 'type-input';
+        }
+
+        input.placeholder = source === 'type' ? 'Название типа' : 'Слова или фразы через запятую';
+
+        input.addEventListener('input', handleFormChange);
+
+        wrapper.appendChild(caption);
+
+        wrapper.appendChild(input);
+
+        if (source !== 'type') {
+          const hint = document.createElement('div');
+
+          hint.className = 'hint';
+
+          hint.textContent = 'Срабатывает при совпадении хотя бы с одним значением.';
+
+          wrapper.appendChild(hint);
+        }
+
+        return wrapper;
+      }
+
+      function saveCurrentGroupFromForm() {
+        const group = groups[activeGroupIndex];
+
+        if (!group) {
+          return;
+        }
+
+        group.network = normalizeNetwork(networkInput.value);
+
+        group.name = groupNameInput.value.trim();
+
+        group.url = groupUrlInput.value.trim();
+
+        group.dateStart = dateStartInput.value;
+
+        group.dateEnd = dateEndInput.value;
+
+        group.advertisingTypes = collectRulesFromForm();
+      }
+
+      function collectRulesFromForm() {
+        const group = groups[activeGroupIndex];
+
+        if (!group) {
+          return [];
+        }
+
+        const currentNetwork = normalizeNetwork(networkInput.value);
+
+        const isTextOnlyNetwork = currentNetwork === 'telegram' || currentNetwork === 'instagram';
+
+        return group.advertisingTypes.map(function (rule, index) {
+          const typeInput = document.querySelector(
+            'input[data-rule-index="' + index + '"][data-rule-source="type"]',
+          );
+
+          const postInput = document.querySelector(
+            'input[data-rule-index="' + index + '"][data-rule-source="post"]',
+          );
+
+          const videoInput = document.querySelector(
+            'input[data-rule-index="' + index + '"][data-rule-source="video"]',
+          );
+
+          return {
+            type: typeInput ? typeInput.value.trim() : '',
+
+            postWords: splitWords(postInput ? postInput.value : ''),
+
+            /*
+             * При переключении на Telegram или Instagram
+             * старые videoWords сохраняются,
+             * хотя интерфейс их скрывает.
+             */
+            videoWords: isTextOnlyNetwork
+              ? Array.isArray(rule.videoWords)
+                ? rule.videoWords
+                : []
+              : splitWords(videoInput ? videoInput.value : ''),
+          };
+        });
+      }
+
+      function splitWords(value) {
+        const result = [];
+        const used = {};
+
+        String(value || '')
+          .split(',')
+          .forEach(function (item) {
+            const cleaned = String(item || '')
+              .trim()
+              .replace(/\s+/g, ' ');
+
+            if (!cleaned) {
+              return;
+            }
+
+            const key = cleaned.toLowerCase().replace(/ё/g, 'е');
+
+            if (used[key]) {
+              return;
+            }
+
+            used[key] = true;
+            result.push(cleaned);
+          });
+
+        return result;
+      }
+
+      function switchGroup(index) {
+        if (index === activeGroupIndex || isSaving || isParsing) {
+          return;
+        }
+
+        saveCurrentGroupFromForm();
+
+        activeGroupIndex = index;
+
+        renderAll();
+        handleFormChange();
+      }
+
+      function addGroup() {
+        if (isSaving || isParsing) {
+          return;
+        }
+
+        saveCurrentGroupFromForm();
+
+        groups.push(createNewGroup());
+
+        activeGroupIndex = groups.length - 1;
+
+        renderAll();
+        handleFormChange();
+
+        groupNameInput.focus();
+        groupNameInput.select();
+      }
+
+      function deleteGroup() {
+        if (groups.length <= 1 || isSaving || isParsing) {
+          return;
+        }
+
+        const group = groups[activeGroupIndex];
+
+        const confirmed = window.confirm(
+          'Удалить группу «' +
+            (group.name || 'Без названия') +
+            '» из настроек? Лист в Google Таблице автоматически удалён не будет.',
+        );
+
+        if (!confirmed) {
+          return;
+        }
+
+        groups.splice(activeGroupIndex, 1);
+
+        activeGroupIndex = Math.min(activeGroupIndex, groups.length - 1);
+
+        renderAll();
+        handleFormChange();
+      }
+
+      function addAdvertisingType() {
+        if (isSaving || isParsing) {
+          return;
+        }
+
+        saveCurrentGroupFromForm();
+
+        groups[activeGroupIndex].advertisingTypes.push({
+          type: '',
+          postWords: [],
+          videoWords: [],
+        });
+
+        renderActiveGroup();
+        handleFormChange();
+
+        const newIndex = groups[activeGroupIndex].advertisingTypes.length - 1;
+
+        const input = document.querySelector(
+          'input[data-rule-index="' + newIndex + '"][data-rule-source="type"]',
+        );
+
+        if (input) {
+          input.focus();
+        }
+      }
+
+      function deleteAdvertisingType(index) {
+        if (isSaving || isParsing) {
+          return;
+        }
+
+        saveCurrentGroupFromForm();
+
+        groups[activeGroupIndex].advertisingTypes.splice(index, 1);
+
+        renderActiveGroup();
+        handleFormChange();
+      }
+
+      function handleNetworkChange() {
+        saveCurrentGroupFromForm();
+
+        const group = groups[activeGroupIndex];
+
+        group.network = normalizeNetwork(networkInput.value);
+
+        renderAll();
+        handleFormChange();
+      }
+
+      function handleFormChange() {
+        saveCurrentGroupFromForm();
+        renderGroupTabs();
+
+        const hasChanges = serializeSettings() !== originalSettingsJson;
+
+        setChangedState(hasChanges);
+      }
+
+      function collectSettings() {
+        saveCurrentGroupFromForm();
+
+        return {
+          groups: groups.map(function (group) {
+            return {
+              id: group.id,
+
+              name: String(group.name || '').trim(),
+
+              network: normalizeNetwork(group.network),
+
+              url: String(group.url || '').trim(),
+
+              dateStart: group.dateStart || '',
+
+              dateEnd: group.dateEnd || '',
+
+              advertisingTypes: group.advertisingTypes,
+            };
+          }),
+        };
+      }
+
+      function serializeSettings() {
+        return JSON.stringify(collectSettings());
+      }
+
+      function validateForm(settings) {
+        if (!settings.groups || settings.groups.length === 0) {
+          throw new Error('Добавьте хотя бы одну группу.');
+        }
+
+        const groupNames = {};
+
+        settings.groups.forEach(function (group, groupIndex) {
+          if (!group.name) {
+            throw new Error('Введите название группы №' + (groupIndex + 1) + '.');
+          }
+
+          if (!group.url) {
+            throw new Error('Введите URL группы «' + group.name + '».');
+          }
+
+          if (group.dateStart && group.dateEnd && group.dateStart > group.dateEnd) {
+            throw new Error('В группе «' + group.name + '» дата начала позже даты окончания.');
+          }
+
+          if (
+            (group.network === 'telegram' || group.network === 'instagram') &&
+            (!group.dateStart || !group.dateEnd)
+          ) {
+            const networkName = group.network === 'instagram' ? 'Instagram' : 'Telegram';
+
+            throw new Error(
+              'Для ' + networkName + '-группы «' + group.name + '» укажите обе даты.',
+            );
+          }
+
+          const groupKey = group.name.toLowerCase().replace(/ё/g, 'е');
+
+          if (groupNames[groupKey]) {
+            throw new Error('Название группы «' + group.name + '» повторяется.');
+          }
+
+          groupNames[groupKey] = true;
+
+          const typeNames = {};
+
+          group.advertisingTypes.forEach(function (type, typeIndex) {
+            if (!type.type) {
+              throw new Error(
+                'Введите название типа рекламы в группе «' +
+                  group.name +
+                  '», строка ' +
+                  (typeIndex + 1) +
+                  '.',
+              );
+            }
+
+            const typeKey = type.type.toLowerCase().replace(/ё/g, 'е');
+
+            if (typeNames[typeKey]) {
+              throw new Error('В группе «' + group.name + '» повторяется тип «' + type.type + '».');
+            }
+
+            typeNames[typeKey] = true;
+          });
+        });
+      }
+
+      function setChangedState(hasChanges) {
+        saveButton.disabled = !hasChanges || isSaving || isParsing;
+
+        parseButton.disabled = hasChanges || isSaving || isParsing;
+
+        addGroupButton.disabled = isSaving || isParsing;
+
+        addTypeButton.disabled = isSaving || isParsing;
+
+        deleteGroupButton.disabled = groups.length <= 1 || isSaving || isParsing;
+
+        setInputsDisabled(isSaving || isParsing);
+
+        if (isSaving || isParsing) {
+          return;
+        }
+
+        if (hasChanges) {
+          setStatus('Есть несохранённые изменения. Сначала нажмите «Сохранить».', 'loading');
+        } else {
+          setStatus('Настройки не изменены.', '');
+        }
+      }
+
+      function setInputsDisabled(disabled) {
+        document.querySelectorAll('input, select').forEach(function (input) {
+          input.disabled = disabled;
+        });
+
+        document.querySelectorAll('.delete-type-button').forEach(function (button) {
+          button.disabled = disabled;
+        });
+      }
+
+      function saveSettings() {
+        if (saveButton.disabled || isSaving || isParsing) {
+          return;
+        }
+
+        const settings = collectSettings();
+
+        try {
+          validateForm(settings);
+        } catch (error) {
+          setStatus(error.message, 'error');
+
+          return;
+        }
+
+        isSaving = true;
+
+        saveButton.textContent = 'Сохранение…';
+
+        setChangedState(true);
+
+        setStatus('Сохраняем настройки всех групп…', 'loading');
+
+        google.script.run
+          .withSuccessHandler(handleSettingsSaved)
+          .withFailureHandler(handleSaveError)
+          .saveParserSettings(settings);
+      }
+
+      function handleSettingsSaved(result) {
+        isSaving = false;
+
+        saveButton.textContent = 'Сохранить';
+
+        const returnedSettings = result && result.settings ? result.settings : collectSettings();
+
+        const activeId = groups[activeGroupIndex] ? groups[activeGroupIndex].id : '';
+
+        groups = prepareGroups(returnedSettings.groups || []);
+
+        const foundIndex = groups.findIndex(function (group) {
+          return group.id === activeId;
+        });
+
+        activeGroupIndex = foundIndex >= 0 ? foundIndex : 0;
+
+        if (returnedSettings.spreadsheetUrl) {
+          spreadsheetLink.href = returnedSettings.spreadsheetUrl;
+        }
+
+        renderAll();
+
+        originalSettingsJson = serializeSettings();
+
+        setChangedState(false);
+
+        setStatus('Настройки сохранены. Можно запускать активную группу.', 'success');
+      }
+
+      function handleSaveError(error) {
+        isSaving = false;
+
+        saveButton.textContent = 'Сохранить';
+
+        setInputsDisabled(false);
+
+        setStatus('Ошибка сохранения: ' + getErrorMessage(error), 'error');
+
+        handleFormChange();
+      }
+
+      function startParsing() {
+        if (parseButton.disabled || isSaving || isParsing) {
+          return;
+        }
+
+        saveCurrentGroupFromForm();
+
+        const group = groups[activeGroupIndex];
+
+        if (!group) {
+          return;
+        }
+
+        try {
+          validateForm(collectSettings());
+        } catch (error) {
+          setStatus(error.message, 'error');
+
+          return;
+        }
+
+        isParsing = true;
+
+        parseButton.textContent = 'Парсинг выполняется…';
+
+        setChangedState(false);
+
+        const networkName =
+          group.network === 'telegram'
+            ? 'Telegram'
+            : group.network === 'instagram'
+              ? 'Instagram'
+              : 'ВКонтакте';
+
+        setStatus(
+          'Парсим ' + networkName + '-группу «' + group.name + '». Не закрывайте страницу.',
+          'loading',
+        );
+
+        google.script.run
+          .withSuccessHandler(handleParsingSuccess)
+          .withFailureHandler(handleParsingError)
+          .parseGroupBySettings(group.id);
+      }
+
+      function handleParsingSuccess(result) {
+        isParsing = false;
+
+        parseButton.textContent = 'Запустить эту группу';
+
+        setChangedState(false);
+
+        if (result && result.spreadsheetUrl) {
+          spreadsheetLink.href = result.spreadsheetUrl;
+        }
+
+        const postsCount = result && typeof result.postsCount === 'number' ? result.postsCount : 0;
+
+        const sheetName = result && result.sheetName ? result.sheetName : '';
+
+        const resultNetwork = result && result.network ? result.network : '';
+
+        const networkName =
+          resultNetwork === 'telegram'
+            ? 'Telegram'
+            : resultNetwork === 'instagram'
+              ? 'Instagram'
+              : 'ВКонтакте';
+
+        setStatus(
+          'Парсинг ' +
+            networkName +
+            ' завершён. Найдено публикаций: ' +
+            postsCount +
+            '. Результат записан на лист «' +
+            sheetName +
+            '».',
+          'success',
+        );
+      }
+
+      function handleParsingError(error) {
+        isParsing = false;
+
+        parseButton.textContent = 'Запустить эту группу';
+
+        setChangedState(false);
+
+        setStatus('Ошибка парсинга: ' + getErrorMessage(error), 'error');
+      }
+
+      function setStatus(message, type) {
+        statusBox.textContent = message;
+
+        statusBox.className = 'status' + (type ? ' ' + type : '');
+      }
+
+      function getErrorMessage(error) {
+        if (!error) {
+          return 'неизвестная ошибка';
+        }
+
+        if (error.message) {
+          return error.message;
+        }
+
+        return String(error);
+      }
+
+      networkInput.addEventListener('change', handleNetworkChange);
+
+      groupNameInput.addEventListener('input', handleFormChange);
+
+      groupUrlInput.addEventListener('input', handleFormChange);
+
+      dateStartInput.addEventListener('change', handleFormChange);
+
+      dateEndInput.addEventListener('change', handleFormChange);
+
+      addGroupButton.addEventListener('click', addGroup);
+
+      deleteGroupButton.addEventListener('click', deleteGroup);
+
+      addTypeButton.addEventListener('click', addAdvertisingType);
+
+      parseButton.addEventListener('click', startParsing);
+
+      saveButton.addEventListener('click', saveSettings);
+
+      window.addEventListener('load', loadSettings);
+    </script>
+  </body>
+</html>
