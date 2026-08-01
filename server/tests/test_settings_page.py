@@ -119,6 +119,38 @@ class SettingsPageTestCase(unittest.TestCase):
         self.assertIn("? []", script)
         self.assertIn("groups: prepareGroupsForSave()", script)
 
+    def test_parse_launch_section_and_button_are_present(self):
+        page = self.get_page().get_data(as_text=True)
+        script = self.get_script()
+
+        self.assertIn("Запуск парсинга", page)
+        self.assertIn('id="parseGroupsContainer"', page)
+        self.assertIn('state.busy ? "Запуск…" : "Запустить"', script)
+
+    def test_parse_launch_uses_post_api(self):
+        script = self.get_script()
+
+        self.assertIn('const parseApiUrl = "/api/v1/parse";', script)
+        self.assertIn('method: "POST"', script)
+        self.assertIn("body: JSON.stringify({ groupId: groupId })", script)
+
+    def test_parse_status_is_polled_every_two_seconds(self):
+        script = self.get_script()
+
+        self.assertIn('const runsApiUrl = "/api/v1/runs/";', script)
+        self.assertIn("const pollIntervalMilliseconds = 2000;", script)
+        self.assertIn("async function pollRun(groupId, runId)", script)
+        self.assertIn("scheduleRunPoll(groupId, runId);", script)
+
+    def test_parse_api_errors_are_shown_without_inner_html(self):
+        script = self.get_script()
+
+        self.assertIn("function getApiError(data, fallbackMessage)", script)
+        self.assertIn('state.messageType = "error";', script)
+        self.assertIn('!message.includes("Traceback")', script)
+        self.assertIn("element.textContent = text;", script)
+        self.assertNotIn("innerHTML", script)
+
 
 if __name__ == "__main__":
     unittest.main()

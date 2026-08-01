@@ -2,6 +2,9 @@
 
 (function () {
   const apiUrl = "/api/v1/settings";
+  const parseApiUrl = "/api/v1/parse";
+  const runsApiUrl = "/api/v1/runs/";
+  const pollIntervalMilliseconds = 2000;
 
   const revisionValue = document.getElementById("revisionValue");
   const addGroupButton = document.getElementById("addGroupButton");
@@ -10,10 +13,14 @@
   const statusMessage = document.getElementById("statusMessage");
   const emptyState = document.getElementById("emptyState");
   const groupsContainer = document.getElementById("groupsContainer");
+  const parseGroupsContainer = document.getElementById(
+    "parseGroupsContainer"
+  );
 
   let revision = 0;
   let groups = [];
   let requestInProgress = false;
+  const parseStates = new Map();
 
   function createElement(tagName, className, text) {
     const element = document.createElement(tagName);
@@ -397,6 +404,178 @@
     return card;
   }
 
+  function getParseState(groupId) {
+    if (!parseStates.has(groupId)) {
+      parseStates.set(groupId, {
+        busy: false,
+        message: "",
+        messageType: "info",
+      });
+    }
+
+    return parseStates.get(groupId);
+  }
+
+  function getApiError(data, fallbackMessage) {
+    const message =
+      data && typeof data.error === "string" ? data.error.trim() : "";
+
+    return message && !message.includes("Traceback")
+      ? message
+      : fallbackMessage;
+  }
+
+  async function readJson(response) {
+    try {
+      return await response.json();
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function renderParseLaunch() {
+    parseGroupsContainer.replaceChildren();
+
+    if (groups.length === 0) {
+      parseGroupsContainer.appendChild(
+        createElement(
+          "p",
+          "types-empty",
+          "Добавьте и сохраните группу, чтобы запустить парсинг."
+        )
+      );
+      return;
+    }
+
+    groups.forEach(function (group, groupIndex) {
+      const state = getParseState(group.id);
+      const card = createElement("article", "group-card");
+      const header = createElement("div", "group-header");
+      const title = createElement(
+        "h2",
+        "",
+        group.name || "Группа " + (groupIndex + 1)
+      );
+      const launchButton = createButton(
+        state.busy ? "Запуск…" : "Запустить",
+        "button button-primary",
+        function () {
+          launchParse(group.id);
+        }
+      );
+      launchButton.disabled = state.busy;
+
+      header.appendChild(title);
+      header.appendChild(launchButton);
+      card.appendChild(header);
+
+      if (state.message) {
+        const message = createElement("p", "status", state.message);
+        message.classList.add("status-" + state.messageType);
+        message.setAttribute("role", "status");
+        card.appendChild(message);
+      }
+
+      parseGroupsContainer.appendChild(card);
+    });
+  }
+
+  function scheduleRunPoll(groupId, runId) {
+    window.setTimeout(function () {
+      pollRun(groupId, runId);
+    }, pollIntervalMilliseconds);
+  }
+
+  async function pollRun(groupId, runId) {
+    const state = getParseState(groupId);
+
+    try {
+      const response = await fetch(
+        runsApiUrl + encodeURIComponent(String(runId)),
+        { headers: { Accept: "application/json" } }
+      );
+      const data = await readJson(response);
+
+      if (!response.ok || !data || !data.success || !data.run) {
+        throw new Error(
+          getApiError(data, "Не удалось получить статус запуска.")
+        );
+      }
+
+      if (data.run.status === "running") {
+        state.message = "Парсинг выполняется...";
+        state.messageType = "info";
+        renderParseLaunch();
+        scheduleRunPoll(groupId, runId);
+        return;
+      }
+
+      state.busy = false;
+
+      if (data.run.status === "completed") {
+        state.message =
+          "Готово. Найдено публикаций: " + Number(data.run.count || 0);
+        state.messageType = "success";
+      } else if (data.run.status === "failed") {
+        state.message = "Ошибка запуска";
+        state.messageType = "error";
+      } else {
+        throw new Error("Получен неизвестный статус запуска.");
+      }
+    } catch (error) {
+      state.busy = false;
+      state.message =
+        error instanceof Error
+          ? error.message
+          : "Не удалось получить статус запуска.";
+      state.messageType = "error";
+    }
+
+    renderParseLaunch();
+  }
+
+  async function launchParse(groupId) {
+    const state = getParseState(groupId);
+
+    if (state.busy) {
+      return;
+    }
+
+    state.busy = true;
+    state.message = "Создаём запуск...";
+    state.messageType = "info";
+    renderParseLaunch();
+
+    try {
+      const response = await fetch(parseApiUrl, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ groupId: groupId }),
+      });
+      const data = await readJson(response);
+
+      if (!response.ok || !data || !data.success) {
+        throw new Error(getApiError(data, "Не удалось создать запуск."));
+      }
+
+      state.message = "Запуск создан. runId: " + String(data.runId);
+      state.messageType = "success";
+      renderParseLaunch();
+      scheduleRunPoll(groupId, data.runId);
+    } catch (error) {
+      state.busy = false;
+      state.message =
+        error instanceof Error
+          ? error.message
+          : "Не удалось создать запуск.";
+      state.messageType = "error";
+      renderParseLaunch();
+    }
+  }
+
   function renderGroups() {
     groupsContainer.replaceChildren();
     emptyState.hidden = groups.length !== 0;
@@ -404,6 +583,8 @@
     groups.forEach(function (group, groupIndex) {
       groupsContainer.appendChild(renderGroup(group, groupIndex));
     });
+
+    renderParseLaunch();
   }
 
   async function loadSettings() {
