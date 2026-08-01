@@ -57,7 +57,8 @@ INSTAGRAM_REDIRECT_URI = os.environ.get(
 ).strip()
 
 INSTAGRAM_SCOPES = [
-    "instagram_business_basic"
+    "instagram_business_basic",
+    "instagram_business_manage_insights"
 ]
 
 INSTAGRAM_TOKEN_FILE = (
