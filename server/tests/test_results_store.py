@@ -54,7 +54,7 @@ class ResultsStoreTestCase(unittest.TestCase):
         try:
             return connection.execute(
                 """
-                SELECT group_id, group_name, network,
+                SELECT group_id, group_name, network, status,
                        started_at, finished_at, count
                 FROM parse_runs
                 WHERE id = ?
@@ -74,10 +74,10 @@ class ResultsStoreTestCase(unittest.TestCase):
         row = self._load_run(run_id)
 
         self.assertGreater(run_id, 0)
-        self.assertEqual(row[:3], ("group_1", "Тестовая группа", "vk"))
-        self.assertTrue(row[3])
-        self.assertEqual(row[4:], ("", 0))
-        self.assertIsNotNone(datetime.datetime.fromisoformat(row[3]).tzinfo)
+        self.assertEqual(row[:4], ("group_1", "Тестовая группа", "vk", "running"))
+        self.assertTrue(row[4])
+        self.assertEqual(row[5:], ("", 0))
+        self.assertIsNotNone(datetime.datetime.fromisoformat(row[4]).tzinfo)
 
     def test_run_is_finished(self):
         run_id = self.store.create_run("group_1", "Группа", "vk")
@@ -86,9 +86,75 @@ class ResultsStoreTestCase(unittest.TestCase):
         row = self._load_run(run_id)
 
         self.assertEqual(result["count"], 7)
-        self.assertEqual(row[5], 7)
-        self.assertTrue(row[4])
-        self.assertIsNotNone(datetime.datetime.fromisoformat(row[4]).tzinfo)
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(row[3], "completed")
+        self.assertEqual(row[6], 7)
+        self.assertTrue(row[5])
+        self.assertIsNotNone(datetime.datetime.fromisoformat(row[5]).tzinfo)
+
+    def test_run_is_failed(self):
+        run_id = self.store.create_run("group_1", "Группа", "vk")
+
+        result = self.store.fail_run(run_id, 3)
+        row = self._load_run(run_id)
+
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["count"], 3)
+        self.assertEqual(row[3], "failed")
+        self.assertTrue(row[5])
+        self.assertEqual(row[6], 3)
+
+    def test_existing_database_is_migrated_with_compatible_statuses(self):
+        legacy_path = (
+            pathlib.Path(self.temporary_directory.name)
+            / "legacy_results.sqlite3"
+        )
+        connection = sqlite3.connect(legacy_path)
+        try:
+            connection.execute(
+                """
+                CREATE TABLE parse_runs (
+                    id INTEGER PRIMARY KEY,
+                    group_id TEXT NOT NULL,
+                    group_name TEXT NOT NULL,
+                    network TEXT NOT NULL,
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT NOT NULL,
+                    count INTEGER NOT NULL
+                )
+                """
+            )
+            connection.executemany(
+                """
+                INSERT INTO parse_runs (
+                    group_id, group_name, network,
+                    started_at, finished_at, count
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    ("running", "Running", "vk", "start", "", 0),
+                    ("done", "Done", "vk", "start", "finish", 2),
+                ),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        ResultsStore(legacy_path)
+
+        connection = sqlite3.connect(legacy_path)
+        try:
+            statuses = connection.execute(
+                "SELECT group_id, status FROM parse_runs ORDER BY id"
+            ).fetchall()
+        finally:
+            connection.close()
+
+        self.assertEqual(
+            statuses,
+            [("running", "running"), ("done", "completed")],
+        )
 
     def test_posts_are_saved(self):
         run_id = self.store.create_run("group_1", "Группа", "vk")

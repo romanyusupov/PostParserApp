@@ -26,6 +26,10 @@ POST_METRIC_FIELDS = (
     "forwards",
 )
 
+RUNNING_STATUS = "running"
+COMPLETED_STATUS = "completed"
+FAILED_STATUS = "failed"
+
 
 class ResultsStoreError(Exception):
     """Ошибка чтения или записи результатов парсинга."""
@@ -128,12 +132,35 @@ class ResultsStore:
                     group_id TEXT NOT NULL,
                     group_name TEXT NOT NULL,
                     network TEXT NOT NULL,
+                    status TEXT NOT NULL,
                     started_at TEXT NOT NULL,
                     finished_at TEXT NOT NULL,
                     count INTEGER NOT NULL
                 )
                 """
             )
+            run_columns = {
+                row["name"]
+                for row in connection.execute(
+                    "PRAGMA table_info(parse_runs)"
+                ).fetchall()
+            }
+            if "status" not in run_columns:
+                connection.execute(
+                    """
+                    ALTER TABLE parse_runs
+                    ADD COLUMN status TEXT NOT NULL DEFAULT 'running'
+                    """
+                )
+                connection.execute(
+                    """
+                    UPDATE parse_runs
+                    SET status = CASE
+                        WHEN finished_at = '' THEN 'running'
+                        ELSE 'completed'
+                    END
+                    """
+                )
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS posts (
@@ -194,16 +221,18 @@ class ResultsStore:
                     group_id,
                     group_name,
                     network,
+                    status,
                     started_at,
                     finished_at,
                     count
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     _safe_text(group_id),
                     _safe_text(group_name),
                     _safe_text(network),
+                    RUNNING_STATUS,
                     _utc_now(),
                     "",
                     0,
@@ -218,7 +247,12 @@ class ResultsStore:
         finally:
             connection.close()
 
-    def finish_run(self, run_id: Any, count: Any) -> dict[str, Any]:
+    def _complete_run(
+        self,
+        run_id: Any,
+        count: Any,
+        status: str,
+    ) -> dict[str, Any]:
         normalized_run_id = _positive_run_id(run_id)
         normalized_count = _safe_metric(count)
         finished_at = _utc_now()
@@ -229,12 +263,13 @@ class ResultsStore:
             cursor = connection.execute(
                 """
                 UPDATE parse_runs
-                SET finished_at = ?, count = ?
+                SET finished_at = ?, count = ?, status = ?
                 WHERE id = ?
                 """,
                 (
                     finished_at,
                     normalized_count,
+                    status,
                     normalized_run_id,
                 ),
             )
@@ -255,7 +290,22 @@ class ResultsStore:
             "run_id": normalized_run_id,
             "finished_at": finished_at,
             "count": normalized_count,
+            "status": status,
         }
+
+    def finish_run(self, run_id: Any, count: Any) -> dict[str, Any]:
+        return self._complete_run(
+            run_id,
+            count,
+            COMPLETED_STATUS,
+        )
+
+    def fail_run(self, run_id: Any, count: Any) -> dict[str, Any]:
+        return self._complete_run(
+            run_id,
+            count,
+            FAILED_STATUS,
+        )
 
     def save_posts(self, run_id: Any, posts: Any) -> int:
         normalized_run_id = _positive_run_id(run_id)
