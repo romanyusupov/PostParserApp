@@ -7,6 +7,7 @@ from server.postparser_web.parse_routes import parse_bp
 from server.postparser_web.parse_runner import ParseRunnerService
 from server.postparser_web.parse_service import ParseService
 from server.postparser_web.results_store import ResultsStore
+from server.postparser_web.results_routes import results_bp
 from server.postparser_web.run_routes import run_bp
 from server.postparser_web.settings_page import settings_page_blueprint
 from server.postparser_web.settings_routes import settings_blueprint
@@ -62,5 +63,6 @@ def create_app(test_config=None):
     app.register_blueprint(vk_blueprint)
     app.register_blueprint(parse_bp)
     app.register_blueprint(run_bp)
+    app.register_blueprint(results_bp)
 
     return app
