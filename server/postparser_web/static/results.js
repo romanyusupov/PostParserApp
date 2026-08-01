@@ -12,6 +12,12 @@
   const selectedRunDescription = document.getElementById(
     "selectedRunDescription"
   );
+  const exportGoogleSheetsButton = document.getElementById(
+    "exportGoogleSheetsButton"
+  );
+  const exportResult = document.getElementById("exportResult");
+
+  let selectedRunId = null;
 
   function createElement(tagName, className, text) {
     const element = document.createElement(tagName);
@@ -93,6 +99,12 @@
     runsTableBody.replaceChildren();
     runsEmptyState.hidden = runs.length !== 0;
 
+    if (runs.length === 0) {
+      selectedRunId = null;
+      postsSection.hidden = true;
+      exportGoogleSheetsButton.hidden = true;
+    }
+
     runs.forEach(function (run) {
       const row = createElement("tr");
       appendCell(row, String(run.group_name || "—"));
@@ -133,7 +145,14 @@
   }
 
   async function loadPosts(runId, groupName) {
+    selectedRunId = runId;
     postsSection.hidden = false;
+    exportGoogleSheetsButton.hidden = false;
+    exportGoogleSheetsButton.disabled = false;
+    exportGoogleSheetsButton.textContent =
+      "Экспортировать в Google Sheets";
+    exportResult.hidden = true;
+    exportResult.replaceChildren();
     selectedRunDescription.textContent =
       "Запуск " + String(runId) + " · " + String(groupName || "Без названия");
     postsTableBody.replaceChildren();
@@ -167,6 +186,86 @@
     }
   }
 
+  function googleSheetsUrl(value) {
+    try {
+      const url = new URL(String(value));
+      return url.protocol === "https:" && url.hostname === "docs.google.com"
+        ? url.href
+        : "";
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function showExportSuccess(url) {
+    const link = createElement("a", "", "Открыть Google Sheets");
+    link.href = url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+
+    exportResult.className = "status status-success";
+    exportResult.replaceChildren(
+      document.createTextNode("Готово. "),
+      link
+    );
+    exportResult.hidden = false;
+  }
+
+  function showExportError(message) {
+    exportResult.className = "status status-error";
+    exportResult.textContent = message;
+    exportResult.hidden = false;
+  }
+
+  async function exportSelectedRun() {
+    if (selectedRunId === null || exportGoogleSheetsButton.disabled) {
+      return;
+    }
+
+    const runId = selectedRunId;
+    exportGoogleSheetsButton.disabled = true;
+    exportGoogleSheetsButton.textContent = "Экспортируем…";
+    exportResult.hidden = true;
+    exportResult.replaceChildren();
+
+    try {
+      const response = await fetch(
+        runsApiUrl +
+          "/" +
+          encodeURIComponent(String(runId)) +
+          "/export/google-sheets",
+        {
+          method: "POST",
+          headers: { Accept: "application/json" },
+        }
+      );
+      const data = await readJson(response);
+
+      if (!response.ok || !data || !data.success) {
+        throw new Error(
+          apiError(data, "Не удалось экспортировать результаты.")
+        );
+      }
+
+      const url = googleSheetsUrl(data.url);
+      if (!url) {
+        throw new Error("Сервис экспорта не вернул корректную ссылку.");
+      }
+
+      showExportSuccess(url);
+    } catch (error) {
+      showExportError(
+        error instanceof Error
+          ? error.message
+          : "Не удалось экспортировать результаты."
+      );
+    } finally {
+      exportGoogleSheetsButton.disabled = false;
+      exportGoogleSheetsButton.textContent =
+        "Экспортировать в Google Sheets";
+    }
+  }
+
   async function loadRuns() {
     setStatus("Загружаем запуски…", "info");
 
@@ -197,5 +296,6 @@
     }
   }
 
+  exportGoogleSheetsButton.addEventListener("click", exportSelectedRun);
   loadRuns();
 })();

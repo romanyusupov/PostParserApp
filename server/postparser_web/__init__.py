@@ -3,11 +3,16 @@ import pathlib
 from flask import Flask
 
 from server.postparser_web.config import get_settings_database_path
+from server.postparser_web.google_sheets_export import (
+    GoogleSheetsConfigurationError,
+    GoogleSheetsExporter,
+)
 from server.postparser_web.parse_routes import parse_bp
 from server.postparser_web.parse_runner import ParseRunnerService
 from server.postparser_web.parse_service import ParseService
 from server.postparser_web.results_store import ResultsStore
 from server.postparser_web.results_routes import results_bp
+from server.postparser_web.results_export_routes import results_export_bp
 from server.postparser_web.run_routes import run_bp
 from server.postparser_web.settings_page import settings_page_blueprint
 from server.postparser_web.settings_routes import settings_blueprint
@@ -44,6 +49,26 @@ def create_app(test_config=None):
 
     app.extensions["results_store"] = results_store
 
+    google_sheets_exporter = app.config.get("GOOGLE_SHEETS_EXPORTER")
+    if google_sheets_exporter is None:
+        try:
+            google_sheets_exporter = GoogleSheetsExporter(
+                client_factory=app.config.get(
+                    "GOOGLE_SHEETS_CLIENT_FACTORY"
+                ),
+                spreadsheet_id=app.config.get(
+                    "GOOGLE_SHEETS_SPREADSHEET_ID"
+                ),
+                credentials_json=app.config.get(
+                    "GOOGLE_SHEETS_CREDENTIALS_JSON"
+                ),
+                results_store=results_store,
+            )
+        except GoogleSheetsConfigurationError:
+            google_sheets_exporter = None
+
+    app.extensions["google_sheets_exporter"] = google_sheets_exporter
+
     parse_runner = app.config.get("PARSE_RUNNER")
     if parse_runner is None:
         parse_service = ParseService(
@@ -64,5 +89,6 @@ def create_app(test_config=None):
     app.register_blueprint(parse_bp)
     app.register_blueprint(run_bp)
     app.register_blueprint(results_bp)
+    app.register_blueprint(results_export_bp)
 
     return app

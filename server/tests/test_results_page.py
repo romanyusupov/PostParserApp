@@ -3,6 +3,10 @@ import tempfile
 import unittest
 
 from server.postparser_web import create_app
+from server.postparser_web.google_sheets_export import (
+    GoogleSheetsConfigurationError,
+    GoogleSheetsExportError,
+)
 from server.postparser_web.results_store import ResultsStore
 
 
@@ -20,6 +24,20 @@ class BrokenResultsStore:
 
     def get_posts(self, group_id=None, network=None):
         raise RuntimeError("private database details")
+
+
+class MockExporter:
+    def __init__(self, error=None):
+        self.error = error
+        self.run_ids = []
+
+    def export_run(self, run_id):
+        self.run_ids.append(run_id)
+        if self.error is not None:
+            raise self.error
+        return {
+            "url": "https://docs.google.com/spreadsheets/d/test-sheet/edit"
+        }
 
 
 def make_post(external_id="post_1"):
@@ -44,12 +62,14 @@ class ResultsPageTestCase(unittest.TestCase):
         self.results_store = ResultsStore(
             temporary_path / "results.sqlite3"
         )
+        self.exporter = MockExporter()
         self.app = create_app(
             {
                 "TESTING": True,
                 "SETTINGS_DATABASE_PATH": temporary_path / "settings.sqlite3",
                 "RESULTS_STORE": self.results_store,
                 "PARSE_RUNNER": UnusedRunner(),
+                "GOOGLE_SHEETS_EXPORTER": self.exporter,
             }
         )
         self.client = self.app.test_client()
@@ -171,6 +191,98 @@ class ResultsPageTestCase(unittest.TestCase):
         self.assertNotIn("innerHTML", script)
         self.assertIn("element.textContent = text;", script)
         self.assertIn('const runsApiUrl = "/api/v1/results/runs";', script)
+
+    def test_google_sheets_export_button_is_in_page(self):
+        page = self.client.get("/results").get_data(as_text=True)
+
+        self.assertIn('id="exportGoogleSheetsButton"', page)
+        self.assertIn("Экспортировать в Google Sheets", page)
+        self.assertIn("hidden", page)
+
+    def test_results_script_calls_google_sheets_export_api(self):
+        script = self.get_script()
+
+        self.assertIn('"/export/google-sheets"', script)
+        self.assertIn('method: "POST"', script)
+        self.assertIn("exportGoogleSheetsButton.disabled = true;", script)
+        self.assertIn("Открыть Google Sheets", script)
+
+    def test_successful_google_sheets_export_returns_url(self):
+        response = self.client.post(
+            "/api/v1/results/runs/42/export/google-sheets"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.exporter.run_ids, [42])
+        self.assertEqual(
+            response.get_json(),
+            {
+                "success": True,
+                "url": "https://docs.google.com/spreadsheets/d/test-sheet/edit",
+            },
+        )
+
+    def test_google_sheets_configuration_error_returns_503(self):
+        self.exporter.error = GoogleSheetsConfigurationError("not configured")
+
+        response = self.client.post(
+            "/api/v1/results/runs/1/export/google-sheets"
+        )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.get_json(),
+            {
+                "success": False,
+                "error": "Экспорт Google Sheets не настроен",
+            },
+        )
+
+    def test_google_sheets_export_error_returns_502(self):
+        self.exporter.error = GoogleSheetsExportError("client details")
+
+        response = self.client.post(
+            "/api/v1/results/runs/1/export/google-sheets"
+        )
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(
+            response.get_json(),
+            {
+                "success": False,
+                "error": "Не удалось экспортировать результаты",
+            },
+        )
+
+    def test_missing_export_run_returns_404(self):
+        self.exporter.error = GoogleSheetsExportError("Запуск не найден.")
+
+        response = self.client.post(
+            "/api/v1/results/runs/999/export/google-sheets"
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(
+            response.get_json(),
+            {"success": False, "error": "Запуск не найден"},
+        )
+
+    def test_internal_export_error_returns_safe_500(self):
+        self.exporter.error = RuntimeError("private traceback details")
+
+        with self.assertLogs(self.app.logger, level="ERROR"):
+            response = self.client.post(
+                "/api/v1/results/runs/1/export/google-sheets"
+            )
+
+        response_text = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.get_json(),
+            {"success": False, "error": "Внутренняя ошибка сервера"},
+        )
+        self.assertNotIn("Traceback", response_text)
+        self.assertNotIn("private traceback details", response_text)
 
 
 if __name__ == "__main__":

@@ -66,8 +66,27 @@
         aria-labelledby="postsTitle"
         hidden
       >
-        <h2 id="postsTitle">Публикации</h2>
-        <p id="selectedRunDescription" class="section-description"></p>
+        <div class="toolbar">
+          <div>
+            <h2 id="postsTitle">Публикации</h2>
+            <p id="selectedRunDescription" class="section-description"></p>
+          </div>
+          <button
+            id="exportGoogleSheetsButton"
+            class="button button-primary"
+            type="button"
+            hidden
+          >
+            Экспортировать в Google Sheets
+          </button>
+        </div>
+        <div
+          id="exportResult"
+          class="status"
+          role="status"
+          aria-live="polite"
+          hidden
+        ></div>
         <div class="table-card">
           <div class="table-scroll">
             <table>
