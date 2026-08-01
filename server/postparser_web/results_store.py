@@ -307,6 +307,74 @@ class ResultsStore:
             FAILED_STATUS,
         )
 
+    def get_run(self, run_id: Any) -> dict[str, Any] | None:
+        normalized_run_id = _positive_run_id(run_id)
+        connection = self._connect()
+        try:
+            row = connection.execute(
+                """
+                SELECT
+                    id,
+                    group_id,
+                    group_name,
+                    network,
+                    status,
+                    started_at,
+                    finished_at,
+                    count
+                FROM parse_runs
+                WHERE id = ?
+                """,
+                (normalized_run_id,),
+            ).fetchone()
+        finally:
+            connection.close()
+
+        return dict(row) if row is not None else None
+
+    def list_runs(self, limit: Any = 50) -> list[dict[str, Any]]:
+        if isinstance(limit, bool):
+            raise ResultsStoreError(
+                "Лимит запусков должен быть положительным числом."
+            )
+
+        try:
+            normalized_limit = int(limit)
+        except (TypeError, ValueError, OverflowError):
+            raise ResultsStoreError(
+                "Лимит запусков должен быть положительным числом."
+            ) from None
+
+        if normalized_limit <= 0:
+            raise ResultsStoreError(
+                "Лимит запусков должен быть положительным числом."
+            )
+
+        normalized_limit = min(normalized_limit, 50)
+        connection = self._connect()
+        try:
+            rows = connection.execute(
+                """
+                SELECT
+                    id,
+                    group_id,
+                    group_name,
+                    network,
+                    status,
+                    started_at,
+                    finished_at,
+                    count
+                FROM parse_runs
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (normalized_limit,),
+            ).fetchall()
+        finally:
+            connection.close()
+
+        return [dict(row) for row in rows]
+
     def save_posts(self, run_id: Any, posts: Any) -> int:
         normalized_run_id = _positive_run_id(run_id)
         if not isinstance(posts, (list, tuple)):

@@ -7,6 +7,7 @@ from server.postparser_web.parse_routes import parse_bp
 from server.postparser_web.parse_runner import ParseRunnerService
 from server.postparser_web.parse_service import ParseService
 from server.postparser_web.results_store import ResultsStore
+from server.postparser_web.run_routes import run_bp
 from server.postparser_web.settings_page import settings_page_blueprint
 from server.postparser_web.settings_routes import settings_blueprint
 from server.postparser_web.settings_store import SettingsStore
@@ -27,8 +28,8 @@ def create_app(test_config=None):
     )
     app.extensions["settings_store"] = settings_store
 
-    parse_runner = app.config.get("PARSE_RUNNER")
-    if parse_runner is None:
+    results_store = app.config.get("RESULTS_STORE")
+    if results_store is None:
         results_database_path = app.config.get("RESULTS_DATABASE_PATH")
         if results_database_path is None:
             settings_database_path = pathlib.Path(
@@ -39,6 +40,11 @@ def create_app(test_config=None):
             )
 
         results_store = ResultsStore(results_database_path)
+
+    app.extensions["results_store"] = results_store
+
+    parse_runner = app.config.get("PARSE_RUNNER")
+    if parse_runner is None:
         parse_service = ParseService(
             settings_store,
             parser_factories=app.config.get("PARSER_FACTORIES"),
@@ -48,7 +54,6 @@ def create_app(test_config=None):
             parse_service,
             results_store,
         )
-        app.extensions["results_store"] = results_store
         app.extensions["parse_service"] = parse_service
 
     app.extensions["parse_runner"] = parse_runner
@@ -56,5 +61,6 @@ def create_app(test_config=None):
     app.register_blueprint(settings_page_blueprint)
     app.register_blueprint(vk_blueprint)
     app.register_blueprint(parse_bp)
+    app.register_blueprint(run_bp)
 
     return app

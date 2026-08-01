@@ -104,6 +104,45 @@ class ResultsStoreTestCase(unittest.TestCase):
         self.assertTrue(row[5])
         self.assertEqual(row[6], 3)
 
+    def test_get_run_returns_run_and_missing_run_returns_none(self):
+        run_id = self.store.create_run("group_1", "Группа", "vk")
+        self.store.finish_run(run_id, 4)
+
+        run = self.store.get_run(run_id)
+
+        self.assertEqual(
+            run,
+            {
+                "id": run_id,
+                "group_id": "group_1",
+                "group_name": "Группа",
+                "network": "vk",
+                "status": "completed",
+                "started_at": run["started_at"],
+                "finished_at": run["finished_at"],
+                "count": 4,
+            },
+        )
+        self.assertIsNone(self.store.get_run(run_id + 1000))
+
+    def test_list_runs_is_newest_first_and_limited_to_fifty(self):
+        run_ids = [
+            self.store.create_run(
+                f"group_{index}",
+                f"Группа {index}",
+                "vk",
+            )
+            for index in range(55)
+        ]
+
+        runs = self.store.list_runs(limit=100)
+
+        self.assertEqual(len(runs), 50)
+        self.assertEqual(
+            [run["id"] for run in runs],
+            list(reversed(run_ids))[:50],
+        )
+
     def test_existing_database_is_migrated_with_compatible_statuses(self):
         legacy_path = (
             pathlib.Path(self.temporary_directory.name)
