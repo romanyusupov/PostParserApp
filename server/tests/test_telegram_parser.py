@@ -1,12 +1,14 @@
 import datetime
+import sys
 import unittest
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest import mock
 
 from server.postparser_web.telegram_parser import (
     TelegramConfigurationError,
     TelegramParser,
     TelegramParserError,
+    _default_client_factory,
     normalize_telegram_channel,
     normalize_telegram_post,
 )
@@ -14,6 +16,7 @@ from server.postparser_web.telegram_parser import (
 
 API_HASH = "test-api-hash-that-must-stay-secret"
 SESSION_STRING = "test-session-that-must-stay-secret"
+SESSION_NAME = "C:\\private\\telegram-parser.session"
 
 
 def make_message(
@@ -79,8 +82,10 @@ class FakeClientFactory:
         self.client = client
         self.calls = []
 
-    def __call__(self, api_id, api_hash, session_string):
-        self.calls.append((api_id, api_hash, session_string))
+    def __call__(self, api_id, api_hash, session_string, session_name):
+        self.calls.append(
+            (api_id, api_hash, session_string, session_name)
+        )
         return self.client
 
 
@@ -108,6 +113,139 @@ class TelegramParserConfigurationTestCase(unittest.TestCase):
             with self.subTest(api_hash=api_hash):
                 with self.assertRaises(TelegramConfigurationError):
                     TelegramParser(12345, api_hash)
+
+    def test_real_parse_without_session_is_rejected_before_connect(self):
+        parser = TelegramParser(12345, API_HASH)
+
+        with mock.patch(
+            "server.postparser_web.telegram_parser._default_client_factory"
+        ) as client_factory:
+            with self.assertRaisesRegex(
+                TelegramConfigurationError,
+                "сессия не настроена",
+            ):
+                parser.fetch_posts(
+                    "channel_name",
+                    "2026-07-01",
+                    "2026-07-31",
+                )
+
+        client_factory.assert_not_called()
+
+    def test_session_string_has_priority_over_session_name(self):
+        client = FakeClient()
+        factory = FakeClientFactory(client)
+        parser = TelegramParser(
+            12345,
+            API_HASH,
+            session_string=SESSION_STRING,
+            session_name=SESSION_NAME,
+            client_factory=factory,
+        )
+
+        parser.fetch_posts(
+            "channel_name",
+            "2026-07-01",
+            "2026-07-31",
+        )
+
+        self.assertEqual(
+            factory.calls,
+            [(12345, API_HASH, SESSION_STRING, None)],
+        )
+
+    def test_session_name_is_passed_to_factory_unchanged(self):
+        session_name = " C:\\private folder\\telegram.session "
+        client = FakeClient()
+        factory = FakeClientFactory(client)
+        parser = TelegramParser(
+            12345,
+            API_HASH,
+            session_name=session_name,
+            client_factory=factory,
+        )
+
+        parser.fetch_posts(
+            "channel_name",
+            "2026-07-01",
+            "2026-07-31",
+        )
+
+        self.assertEqual(
+            factory.calls,
+            [(12345, API_HASH, None, session_name)],
+        )
+
+    def test_default_factory_uses_file_session_name(self):
+        telegram_module, sessions_module, telegram_client = (
+            self._fake_telethon_modules()
+        )
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "telethon": telegram_module,
+                "telethon.sessions": sessions_module,
+            },
+        ):
+            client = _default_client_factory(
+                12345,
+                API_HASH,
+                None,
+                SESSION_NAME,
+            )
+
+        self.assertIs(client, telegram_client)
+        self.assertEqual(telegram_client.session, SESSION_NAME)
+
+    def test_default_factory_uses_string_session(self):
+        telegram_module, sessions_module, telegram_client = (
+            self._fake_telethon_modules()
+        )
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "telethon": telegram_module,
+                "telethon.sessions": sessions_module,
+            },
+        ):
+            client = _default_client_factory(
+                12345,
+                API_HASH,
+                SESSION_STRING,
+                None,
+            )
+
+        self.assertIs(client, telegram_client)
+        self.assertEqual(
+            telegram_client.session.value,
+            SESSION_STRING,
+        )
+
+    @staticmethod
+    def _fake_telethon_modules():
+        telegram_module = ModuleType("telethon")
+        sessions_module = ModuleType("telethon.sessions")
+        telegram_client = SimpleNamespace(session=None)
+
+        class FakeStringSession:
+            def __init__(self, value):
+                self.value = value
+
+        class FakeMemorySession:
+            pass
+
+        def client_factory(session, api_id, api_hash):
+            telegram_client.session = session
+            telegram_client.api_id = api_id
+            telegram_client.api_hash = api_hash
+            return telegram_client
+
+        telegram_module.TelegramClient = client_factory
+        sessions_module.StringSession = FakeStringSession
+        sessions_module.MemorySession = FakeMemorySession
+        return telegram_module, sessions_module, telegram_client
 
 
 class TelegramChannelTestCase(unittest.TestCase):
@@ -345,6 +483,25 @@ class TelegramFetchPostsTestCase(unittest.TestCase):
 
         self.assertNotIn(API_HASH, str(context.exception))
         self.assertNotIn(SESSION_STRING, str(context.exception))
+
+    def test_session_name_is_not_exposed_in_exception(self):
+        client = FakeClient(error=TelegramParserError(SESSION_NAME))
+        factory = FakeClientFactory(client)
+        parser = TelegramParser(
+            12345,
+            API_HASH,
+            session_name=SESSION_NAME,
+            client_factory=factory,
+        )
+
+        with self.assertRaises(TelegramParserError) as context:
+            parser.fetch_posts(
+                "channel_name",
+                "2026-07-01",
+                "2026-07-31",
+            )
+
+        self.assertNotIn(SESSION_NAME, str(context.exception))
 
     def test_no_real_telegram_client_is_created(self):
         parser, _, factory = make_parser((make_message(1),))

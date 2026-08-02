@@ -192,15 +192,18 @@ def _default_client_factory(
     api_id: int,
     api_hash: str,
     session_string: str | None,
+    session_name: str | None,
 ) -> Any:
     from telethon import TelegramClient
     from telethon.sessions import MemorySession, StringSession
 
-    session = (
-        StringSession(session_string)
-        if session_string
-        else MemorySession()
-    )
+    if session_string:
+        session = StringSession(session_string)
+    elif session_name:
+        session = session_name
+    else:
+        session = MemorySession()
+
     return TelegramClient(session, api_id, api_hash)
 
 
@@ -216,6 +219,7 @@ class TelegramParser:
         api_id: Any,
         api_hash: Any,
         session_string: Any = None,
+        session_name: Any = None,
         client_factory: Any = None,
     ):
         normalized_api_id = str(api_id or "").strip()
@@ -248,12 +252,27 @@ class TelegramParser:
         self._api_id = numeric_api_id
         self._api_hash = normalized_api_hash
         self._session_string = str(session_string or "").strip() or None
+        raw_session_name = str(session_name or "")
+        self._session_name = (
+            raw_session_name
+            if not self._session_string and raw_session_name.strip()
+            else None
+        )
+        self._session_is_required = (
+            client_factory is None
+            and not self._session_string
+            and not self._session_name
+        )
         self._client_factory = factory
 
     def _safe_error_message(self, error: Exception) -> str:
         message = " ".join(str(error or "").split())
 
-        for secret in (self._api_hash, self._session_string):
+        for secret in (
+            self._api_hash,
+            self._session_string,
+            self._session_name,
+        ):
             if secret:
                 message = message.replace(secret, "[скрыто]")
 
@@ -280,6 +299,7 @@ class TelegramParser:
                 self._api_id,
                 self._api_hash,
                 self._session_string,
+                self._session_name,
             )
             await _await_if_needed(client.connect())
 
@@ -364,6 +384,11 @@ class TelegramParser:
         date_start: Any,
         date_end: Any,
     ) -> list[dict[str, Any]]:
+        if self._session_is_required:
+            raise TelegramConfigurationError(
+                "Telegram-сессия не настроена."
+            )
+
         channel_username = normalize_telegram_channel(channel)
         start_date = parse_telegram_date(date_start, "date_start")
         end_date = parse_telegram_date(date_end, "date_end")

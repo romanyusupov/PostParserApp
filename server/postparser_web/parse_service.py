@@ -25,6 +25,7 @@ INSTAGRAM_ACCESS_TOKEN_ENVIRONMENT_VARIABLE = (
 TELEGRAM_API_ID_ENVIRONMENT_VARIABLE = "TELEGRAM_API_ID"
 TELEGRAM_API_HASH_ENVIRONMENT_VARIABLE = "TELEGRAM_API_HASH"
 TELEGRAM_SESSION_STRING_ENVIRONMENT_VARIABLE = "TELEGRAM_SESSION_STRING"
+TELEGRAM_SESSION_NAME_ENVIRONMENT_VARIABLE = "TELEGRAM_SESSION_NAME"
 
 
 class ParseServiceError(Exception):
@@ -88,8 +89,17 @@ def _create_telegram_parser() -> TelegramParser:
         TELEGRAM_SESSION_STRING_ENVIRONMENT_VARIABLE,
         "",
     ).strip()
+    session_name_value = os.environ.get(
+        TELEGRAM_SESSION_NAME_ENVIRONMENT_VARIABLE,
+        "",
+    )
+    session_name = (
+        session_name_value
+        if session_name_value.strip()
+        else ""
+    )
 
-    if not api_id or not api_hash:
+    if not api_id or not api_hash or not (session_string or session_name):
         raise ParseConfigurationError(
             "Telegram-подключение не настроено."
         )
@@ -98,6 +108,7 @@ def _create_telegram_parser() -> TelegramParser:
         api_id,
         api_hash,
         session_string=session_string or None,
+        session_name=session_name if not session_string else None,
     )
 
 

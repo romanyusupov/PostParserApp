@@ -7,6 +7,7 @@ from server.postparser_web.parse_service import (
     ParseService,
     ParserExecutionError,
     UnsupportedNetworkError,
+    _create_telegram_parser,
 )
 from server.postparser_web.vk_parser import VkParserError
 
@@ -150,6 +151,67 @@ class ParseServiceSelectionTestCase(unittest.TestCase):
             {network: factory.calls for network, factory in factories.items()},
             {"vk": 0, "instagram": 0, "telegram": 1},
         )
+
+
+class TelegramParserFactoryTestCase(unittest.TestCase):
+    def test_file_session_configuration_is_accepted(self):
+        environment = {
+            "TELEGRAM_API_ID": "12345",
+            "TELEGRAM_API_HASH": "secret-hash",
+            "TELEGRAM_SESSION_NAME": "C:\\private\\telegram.session",
+        }
+
+        with (
+            mock.patch.dict("os.environ", environment, clear=True),
+            mock.patch(
+                "server.postparser_web.parse_service.TelegramParser"
+            ) as parser_class,
+        ):
+            parser = _create_telegram_parser()
+
+        self.assertIs(parser, parser_class.return_value)
+        parser_class.assert_called_once_with(
+            "12345",
+            "secret-hash",
+            session_string=None,
+            session_name="C:\\private\\telegram.session",
+        )
+
+    def test_session_string_has_priority_over_file_session(self):
+        environment = {
+            "TELEGRAM_API_ID": "12345",
+            "TELEGRAM_API_HASH": "secret-hash",
+            "TELEGRAM_SESSION_STRING": "secret-session",
+            "TELEGRAM_SESSION_NAME": "C:\\private\\telegram.session",
+        }
+
+        with (
+            mock.patch.dict("os.environ", environment, clear=True),
+            mock.patch(
+                "server.postparser_web.parse_service.TelegramParser"
+            ) as parser_class,
+        ):
+            _create_telegram_parser()
+
+        parser_class.assert_called_once_with(
+            "12345",
+            "secret-hash",
+            session_string="secret-session",
+            session_name=None,
+        )
+
+    def test_missing_sessions_are_rejected(self):
+        environment = {
+            "TELEGRAM_API_ID": "12345",
+            "TELEGRAM_API_HASH": "secret-hash",
+        }
+
+        with mock.patch.dict("os.environ", environment, clear=True):
+            with self.assertRaisesRegex(
+                ParseConfigurationError,
+                "Telegram-подключение не настроено",
+            ):
+                _create_telegram_parser()
 
 
 class ParseServiceErrorTestCase(unittest.TestCase):
