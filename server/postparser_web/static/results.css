@@ -28,7 +28,7 @@
 
 table {
   width: 100%;
-  min-width: 760px;
+  min-width: 1040px;
   border-collapse: collapse;
 }
 
@@ -54,13 +54,104 @@ tbody tr:last-child td {
 .post-text {
   min-width: 280px;
   max-width: 520px;
+}
+
+.post-text-content {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.text-toggle {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  color: #2563eb;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.text-toggle:hover,
+.text-toggle:focus-visible {
+  text-decoration: underline;
+}
+
+.publication-cell {
+  width: 112px;
+  min-width: 112px;
+}
+
+.publication-preview {
+  display: flex;
+  width: 72px;
+  height: 72px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #f1f5f9;
+}
+
+.publication-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.publication-link {
+  margin-top: 8px;
+  white-space: nowrap;
+}
+
+.publication-link a {
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.empty-value {
+  color: #94a3b8;
 }
 
 .metric-cell {
   text-align: right;
   white-space: nowrap;
+}
+
+.metric-header {
+  padding: 0;
+  text-align: right;
+}
+
+.sort-button {
+  display: inline-flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  padding: 10px 16px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.sort-button:hover,
+.sort-button:focus-visible {
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
+.sort-indicator {
+  width: 12px;
+  font-size: 15px;
+  line-height: 1;
 }
 
 .action-cell {

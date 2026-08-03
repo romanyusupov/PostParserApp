@@ -2,6 +2,9 @@
 
 (function () {
   const runsApiUrl = "/api/v1/results/runs";
+  const resultsLogic = window.PostParserResults;
+  const collapsedTextCharacters = 300;
+  const collapsedTextLines = 6;
 
   const statusMessage = document.getElementById("statusMessage");
   const runsTableBody = document.getElementById("runsTableBody");
@@ -16,8 +19,13 @@
     "exportGoogleSheetsButton"
   );
   const exportResult = document.getElementById("exportResult");
+  const sortButtons = Array.from(
+    document.querySelectorAll("[data-sort-field]")
+  );
 
   let selectedRunId = null;
+  let loadedPosts = [];
+  let sortState = { field: null, direction: null };
 
   function createElement(tagName, className, text) {
     const element = document.createElement(tagName);
@@ -99,6 +107,118 @@
     return cell;
   }
 
+  function emptyValue() {
+    return createElement("span", "empty-value", "—");
+  }
+
+  function appendPublicationCell(row, post) {
+    const cell = appendCell(row, "", "publication-cell");
+    const preview = createElement("div", "publication-preview");
+    const imageUrl = resultsLogic.safeHttpUrl(post.image_url);
+
+    if (imageUrl) {
+      const image = createElement("img", "publication-image");
+      image.src = imageUrl;
+      image.alt = "";
+      image.loading = "lazy";
+      image.addEventListener("error", function () {
+        preview.replaceChildren(emptyValue());
+      });
+      preview.appendChild(image);
+    } else {
+      preview.appendChild(emptyValue());
+    }
+
+    const linkContainer = createElement("div", "publication-link");
+    const permalink = resultsLogic.safeHttpUrl(post.url);
+
+    if (permalink) {
+      const link = createElement("a", "", "Открыть пост");
+      link.href = permalink;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      linkContainer.appendChild(link);
+    } else {
+      linkContainer.appendChild(emptyValue());
+    }
+
+    cell.appendChild(preview);
+    cell.appendChild(linkContainer);
+  }
+
+  function appendPostTextCell(row, value) {
+    const cell = appendCell(row, "", "post-text");
+    const text = value === null || value === undefined ? "" : String(value);
+
+    if (!text.trim()) {
+      cell.appendChild(emptyValue());
+      return;
+    }
+
+    const collapsed = resultsLogic.collapsedText(
+      text,
+      collapsedTextCharacters,
+      collapsedTextLines
+    );
+    const content = createElement(
+      "div",
+      "post-text-content",
+      collapsed.text
+    );
+    cell.appendChild(content);
+
+    if (!collapsed.shortened) {
+      return;
+    }
+
+    const toggle = createElement(
+      "button",
+      "text-toggle",
+      "Показать полностью"
+    );
+    toggle.type = "button";
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.addEventListener("click", function () {
+      const expanded = toggle.getAttribute("aria-expanded") === "true";
+      content.textContent = expanded ? collapsed.text : text;
+      toggle.textContent = expanded ? "Показать полностью" : "Свернуть";
+      toggle.setAttribute("aria-expanded", expanded ? "false" : "true");
+    });
+    cell.appendChild(toggle);
+  }
+
+  const sortLabels = {
+    views: "просмотрам",
+    likes: "лайкам",
+    comments: "комментариям",
+  };
+
+  function updateSortHeaders() {
+    sortButtons.forEach(function (button) {
+      const field = button.dataset.sortField;
+      const header = button.closest("th");
+      const indicator = button.querySelector(".sort-indicator");
+      const active = sortState.field === field;
+      const direction = active ? sortState.direction : "none";
+      const nextDirection =
+        active && direction === "descending" ? "ascending" : "descending";
+      const directionLabel =
+        nextDirection === "descending" ? "по убыванию" : "по возрастанию";
+      const actionLabel =
+        "Сортировать по " + sortLabels[field] + " " + directionLabel;
+
+      header.setAttribute("aria-sort", direction);
+      indicator.textContent =
+        direction === "descending"
+          ? "↓"
+          : direction === "ascending"
+            ? "↑"
+            : "";
+      button.setAttribute("aria-label", actionLabel);
+      button.title = actionLabel;
+    });
+  }
+
   function renderRuns(runs) {
     runsTableBody.replaceChildren();
     runsEmptyState.hidden = runs.length !== 0;
@@ -133,13 +253,26 @@
   }
 
   function renderPosts(posts) {
-    postsTableBody.replaceChildren();
-    postsEmptyState.hidden = posts.length !== 0;
+    if (Array.isArray(posts)) {
+      loadedPosts = posts.slice();
+    }
 
-    posts.forEach(function (post) {
+    const displayedPosts = sortState.field
+      ? resultsLogic.sortPosts(
+          loadedPosts,
+          sortState.field,
+          sortState.direction
+        )
+      : loadedPosts.slice();
+
+    postsTableBody.replaceChildren();
+    postsEmptyState.hidden = displayedPosts.length !== 0;
+
+    displayedPosts.forEach(function (post) {
       const row = createElement("tr");
       appendCell(row, formatDate(post.published_at));
-      appendCell(row, String(post.text || ""), "post-text");
+      appendPublicationCell(row, post);
+      appendPostTextCell(row, post.text);
       appendCell(row, String(post.post_type || "—"));
       appendCell(row, formatMetric(post.views), "metric-cell");
       appendCell(row, formatMetric(post.likes), "metric-cell");
@@ -150,6 +283,9 @@
 
   async function loadPosts(runId, groupName) {
     selectedRunId = runId;
+    loadedPosts = [];
+    sortState = { field: null, direction: null };
+    updateSortHeaders();
     postsSection.hidden = false;
     exportGoogleSheetsButton.hidden = false;
     exportGoogleSheetsButton.disabled = false;
@@ -301,5 +437,16 @@
   }
 
   exportGoogleSheetsButton.addEventListener("click", exportSelectedRun);
+  sortButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      sortState = resultsLogic.nextSortState(
+        sortState,
+        button.dataset.sortField
+      );
+      updateSortHeaders();
+      renderPosts();
+    });
+  });
+  updateSortHeaders();
   loadRuns();
 })();

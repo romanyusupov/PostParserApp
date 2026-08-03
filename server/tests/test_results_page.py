@@ -98,6 +98,17 @@ class ResultsPageTestCase(unittest.TestCase):
         self.assertIn("Просмотры", page)
         self.assertIn("/static/results.js", page)
         self.assertIn("/static/results.css", page)
+        self.assertIn("/static/results_logic.js", page)
+
+    def test_publication_column_and_sort_buttons_are_accessible(self):
+        page = self.client.get("/results").get_data(as_text=True)
+
+        self.assertIn("Публикация", page)
+        for field in ("views", "likes", "comments"):
+            self.assertIn(f'data-sort-field="{field}"', page)
+            self.assertIn(f'data-sort-header="{field}"', page)
+        self.assertEqual(page.count('aria-sort="none"'), 3)
+        self.assertIn("Сортировать по просмотрам по убыванию", page)
 
     def test_runs_api_returns_runs(self):
         run_id = self.results_store.create_run("group_1", "Группа", "vk")
@@ -141,7 +152,10 @@ class ResultsPageTestCase(unittest.TestCase):
         self.assertIn("Запусков пока нет.", page)
         self.assertIn("В этом запуске нет публикаций.", page)
         self.assertIn("runsEmptyState.hidden = runs.length !== 0;", script)
-        self.assertIn("postsEmptyState.hidden = posts.length !== 0;", script)
+        self.assertIn(
+            "postsEmptyState.hidden = displayedPosts.length !== 0;",
+            script,
+        )
 
     def test_existing_run_without_posts_returns_empty_list(self):
         run_id = self.results_store.create_run("group_1", "Группа", "vk")
@@ -191,6 +205,47 @@ class ResultsPageTestCase(unittest.TestCase):
         self.assertNotIn("innerHTML", script)
         self.assertIn("element.textContent = text;", script)
         self.assertIn('const runsApiUrl = "/api/v1/results/runs";', script)
+
+    def test_publication_link_and_image_use_safe_dom_methods(self):
+        script = self.get_script()
+
+        self.assertIn(
+            'const link = createElement("a", "", "Открыть пост");',
+            script,
+        )
+        self.assertIn('link.target = "_blank";', script)
+        self.assertIn('link.rel = "noopener noreferrer";', script)
+        self.assertIn('image.loading = "lazy";', script)
+        self.assertIn('image.addEventListener("error"', script)
+        self.assertIn("resultsLogic.safeHttpUrl(post.url)", script)
+        self.assertIn("resultsLogic.safeHttpUrl(post.image_url)", script)
+
+    def test_empty_publication_values_and_text_use_neutral_dash(self):
+        script = self.get_script()
+
+        self.assertIn('createElement("span", "empty-value", "—")', script)
+        self.assertIn("if (!text.trim())", script)
+        self.assertIn("preview.appendChild(emptyValue())", script)
+        self.assertIn("linkContainer.appendChild(emptyValue())", script)
+
+    def test_long_text_uses_safe_expand_and_collapse_controls(self):
+        script = self.get_script()
+
+        self.assertIn("resultsLogic.collapsedText(", script)
+        self.assertIn('"Показать полностью"', script)
+        self.assertIn('"Свернуть"', script)
+        self.assertIn('toggle.setAttribute("aria-expanded"', script)
+        self.assertIn("content.textContent = expanded ? collapsed.text : text;", script)
+
+    def test_sorting_is_client_side_and_updates_accessibility(self):
+        script = self.get_script()
+
+        self.assertIn("resultsLogic.nextSortState(", script)
+        self.assertIn("resultsLogic.sortPosts(", script)
+        self.assertIn('header.setAttribute("aria-sort", direction);', script)
+        self.assertIn('direction === "descending"', script)
+        self.assertIn('direction === "ascending"', script)
+        self.assertIn('button.addEventListener("click"', script)
 
     def test_unavailable_metrics_are_not_rendered_as_zero(self):
         script_text = self.get_script()

@@ -13,6 +13,10 @@
       href="{{ url_for('static', filename='results.css') }}"
     >
     <script
+      src="{{ url_for('static', filename='results_logic.js') }}"
+      defer
+    ></script>
+    <script
       src="{{ url_for('static', filename='results.js') }}"
       defer
     ></script>
@@ -93,11 +97,60 @@
               <thead>
                 <tr>
                   <th scope="col">Дата</th>
+                  <th scope="col">Публикация</th>
                   <th scope="col">Текст</th>
                   <th scope="col">Тип</th>
-                  <th scope="col">Просмотры</th>
-                  <th scope="col">Лайки</th>
-                  <th scope="col">Комментарии</th>
+                  <th
+                    class="metric-header"
+                    scope="col"
+                    data-sort-header="views"
+                    aria-sort="none"
+                  >
+                    <button
+                      class="sort-button"
+                      type="button"
+                      data-sort-field="views"
+                      aria-label="Сортировать по просмотрам по убыванию"
+                      title="Сортировать по просмотрам по убыванию"
+                    >
+                      <span>Просмотры</span>
+                      <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th
+                    class="metric-header"
+                    scope="col"
+                    data-sort-header="likes"
+                    aria-sort="none"
+                  >
+                    <button
+                      class="sort-button"
+                      type="button"
+                      data-sort-field="likes"
+                      aria-label="Сортировать по лайкам по убыванию"
+                      title="Сортировать по лайкам по убыванию"
+                    >
+                      <span>Лайки</span>
+                      <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th
+                    class="metric-header"
+                    scope="col"
+                    data-sort-header="comments"
+                    aria-sort="none"
+                  >
+                    <button
+                      class="sort-button"
+                      type="button"
+                      data-sort-field="comments"
+                      aria-label="Сортировать по комментариям по убыванию"
+                      title="Сортировать по комментариям по убыванию"
+                    >
+                      <span>Комментарии</span>
+                      <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody id="postsTableBody"></tbody>
