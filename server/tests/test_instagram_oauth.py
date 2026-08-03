@@ -1,6 +1,7 @@
 import importlib
 import os
 import pathlib
+import re
 import sys
 import types
 import unittest
@@ -47,6 +48,24 @@ def make_telethon_modules():
 
 
 class InstagramOAuthTestCase(unittest.TestCase):
+    def test_agents_policy_allows_exactly_expected_instagram_scopes(self):
+        repository_root = pathlib.Path(__file__).resolve().parents[2]
+        policy = (repository_root / "AGENTS.md").read_text(
+            encoding="utf-8"
+        )
+        allowed_scopes_match = re.search(
+            r"исчерпывающий список scopes:\s*\n"
+            r"\s+- `([^`]+)`[^\n]*\n"
+            r"\s+- `([^`]+)`",
+            policy,
+        )
+
+        self.assertIsNotNone(allowed_scopes_match)
+        self.assertEqual(
+            list(allowed_scopes_match.groups()),
+            EXPECTED_SCOPES,
+        )
+
     def load_telegram_api(self):
         sys.modules.pop(MODULE_NAME, None)
 
