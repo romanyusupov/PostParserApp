@@ -133,7 +133,7 @@
     const permalink = resultsLogic.safeHttpUrl(post.url);
 
     if (permalink) {
-      const link = createElement("a", "", "Открыть пост");
+      const link = createElement("a", "", "Открыть");
       link.href = permalink;
       link.target = "_blank";
       link.rel = "noopener noreferrer";

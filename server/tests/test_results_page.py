@@ -1,4 +1,5 @@
 import pathlib
+import re
 import tempfile
 import unittest
 
@@ -206,14 +207,38 @@ class ResultsPageTestCase(unittest.TestCase):
 
     def test_results_layout_is_wider_and_keeps_safe_word_wrapping(self):
         stylesheet = self.get_stylesheet()
+        page = self.client.get("/results").get_data(as_text=True)
 
-        self.assertIn("width: min(1480px, calc(100% - 32px));", stylesheet)
-        self.assertIn("min-width: 1440px;", stylesheet)
-        self.assertIn("min-width: 280px;", stylesheet)
-        self.assertIn("min-width: 170px;", stylesheet)
+        width_match = re.search(
+            r"\.posts-table\s*\{[^}]*min-width:\s*(\d+)px;",
+            stylesheet,
+            flags=re.DOTALL,
+        )
+        self.assertIsNotNone(width_match)
+        self.assertGreaterEqual(int(width_match.group(1)), 1180)
+        self.assertLessEqual(int(width_match.group(1)), 1250)
+        self.assertNotIn("min-width: 1440px;", stylesheet)
+        self.assertIn("width: min(1480px, calc(100% - 24px));", stylesheet)
+        self.assertIn("width: 64px;", stylesheet)
+        self.assertIn("height: 64px;", stylesheet)
+        self.assertIn("padding: 12px 10px;", stylesheet)
+        self.assertIn("font-size: 14px;", stylesheet)
         self.assertIn("overflow-wrap: break-word;", stylesheet)
         self.assertIn("word-break: normal;", stylesheet)
         self.assertIn("overflow-x: auto;", stylesheet)
+        self.assertIn('class="posts-table"', page)
+        for column_class in (
+            "date-column",
+            "publication-column",
+            "text-column",
+            "post-type-column",
+            "video-description-column",
+            "advertising-type-column",
+            "views-column",
+            "likes-column",
+            "comments-column",
+        ):
+            self.assertIn(f'class="{column_class}"', page)
 
     def test_empty_data_has_empty_api_and_page_states(self):
         runs_response = self.client.get("/api/v1/results/runs")
@@ -285,7 +310,7 @@ class ResultsPageTestCase(unittest.TestCase):
         script = self.get_script()
 
         self.assertIn(
-            'const link = createElement("a", "", "Открыть пост");',
+            'const link = createElement("a", "", "Открыть");',
             script,
         )
         self.assertIn('link.target = "_blank";', script)
