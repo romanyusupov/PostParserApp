@@ -19,6 +19,7 @@ def make_group(
     url="https://example.test/group",
     date_start="2026-07-01",
     date_end="2026-07-31",
+    advertising_types=None,
 ):
     return {
         "id": group_id,
@@ -27,7 +28,7 @@ def make_group(
         "url": url,
         "dateStart": date_start,
         "dateEnd": date_end,
-        "advertisingTypes": [],
+        "advertisingTypes": list(advertising_types or []),
     }
 
 
@@ -265,6 +266,66 @@ class ParseServiceErrorTestCase(unittest.TestCase):
 
 
 class ParseServiceResultTestCase(unittest.TestCase):
+    def test_advertising_type_is_added_for_every_network(self):
+        advertising_types = [
+            {
+                "type": "Партнёрская публикация",
+                "postWords": ["промокод торсунов"],
+                "videoWords": [],
+            }
+        ]
+
+        for network in ("vk", "telegram", "instagram"):
+            with self.subTest(network=network):
+                parser = FakeParser(
+                    posts=[
+                        {
+                            "source": network,
+                            "external_id": "post_1",
+                            "text": "Используйте промокод Торсунов сегодня",
+                        }
+                    ]
+                )
+                service, _, _ = make_service(
+                    make_group(
+                        network=network,
+                        advertising_types=advertising_types,
+                    ),
+                    parser=parser,
+                )
+
+                result = service.parse_group("group_1")
+
+                self.assertEqual(
+                    result["posts"][0]["advertising_type"],
+                    "Партнёрская публикация",
+                )
+
+    def test_post_without_advertising_match_gets_empty_type(self):
+        parser = FakeParser(
+            posts=[
+                {
+                    "source": "vk",
+                    "external_id": "post_1",
+                    "text": "Обычная публикация",
+                }
+            ]
+        )
+        group = make_group(
+            advertising_types=[
+                {
+                    "type": "Реклама",
+                    "postWords": ["промокод"],
+                    "videoWords": [],
+                }
+            ]
+        )
+        service, _, _ = make_service(group, parser=parser)
+
+        result = service.parse_group("group_1")
+
+        self.assertEqual(result["posts"][0]["advertising_type"], "")
+
     def test_safe_parser_warning_is_returned(self):
         warning = (
             "Instagram Insights unavailable: missing "

@@ -43,6 +43,7 @@ def make_post(external_id="post_1", **values):
         "text": "Полный текст публикации",
         "first_paragraph": "Первый абзац",
         "post_type": "Фото",
+        "advertising_type": "Партнёрская публикация",
         "views": 10,
         "likes": 5,
         "comments": 2,
@@ -133,6 +134,7 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
                 "Сеть",
                 "Группа",
                 "Тип",
+                "Тип рекламы",
                 "Текст",
                 "Первый абзац",
                 "Ссылка",
@@ -157,6 +159,7 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
                 "vk",
                 "ОГТ",
                 "Фото",
+                "Партнёрская публикация",
                 "Полный текст публикации",
                 "Первый абзац",
                 "https://example.test/post",
@@ -185,7 +188,17 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
         self.create_exporter().export_run(run_id)
 
         row = self.client.written_values[0][2][1]
-        self.assertEqual(row[7:], [0, 0, 0, 0, 7])
+        self.assertEqual(row[8:], [0, 0, 0, 0, 7])
+
+    def test_old_post_without_advertising_type_exports_empty_cell(self):
+        run_id = self.create_run(
+            posts=[make_post(advertising_type=None)]
+        )
+
+        self.create_exporter().export_run(run_id)
+
+        row = self.client.written_values[0][2][1]
+        self.assertEqual(row[4], "")
 
     def test_cyrillic_is_preserved(self):
         run_id = self.create_run(
@@ -197,7 +210,7 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
 
         row = self.client.written_values[0][2][1]
         self.assertEqual(row[2], "Русская группа")
-        self.assertEqual(row[4], "Кириллица без потерь")
+        self.assertEqual(row[5], "Кириллица без потерь")
 
     def test_long_sheet_name_is_truncated(self):
         run_id = self.create_run(group_name="Я" * 150)

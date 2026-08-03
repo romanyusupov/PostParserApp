@@ -115,6 +115,11 @@ tbody tr:last-child td {
   color: #94a3b8;
 }
 
+.advertising-type-cell {
+  max-width: 180px;
+  overflow-wrap: anywhere;
+}
+
 .metric-cell {
   text-align: right;
   white-space: nowrap;

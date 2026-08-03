@@ -49,6 +49,7 @@ def make_post(external_id="post_1"):
         "text": "Текст публикации",
         "first_paragraph": "Текст публикации",
         "post_type": "Фото",
+        "advertising_type": "Партнёрская публикация",
         "views": 10,
         "likes": 5,
         "comments": 2,
@@ -139,6 +140,18 @@ class ResultsPageTestCase(unittest.TestCase):
             [post["external_id"] for post in response.get_json()["posts"]],
             ["selected"],
         )
+        self.assertEqual(
+            response.get_json()["posts"][0]["advertising_type"],
+            "Партнёрская публикация",
+        )
+
+    def test_advertising_type_column_and_empty_fallback_are_rendered(self):
+        page = self.client.get("/results").get_data(as_text=True)
+        script = self.get_script()
+
+        self.assertIn("<th scope=\"col\">Тип рекламы</th>", page)
+        self.assertIn("post.advertising_type || \"—\"", script)
+        self.assertIn("\"advertising-type-cell\"", script)
 
     def test_empty_data_has_empty_api_and_page_states(self):
         runs_response = self.client.get("/api/v1/results/runs")

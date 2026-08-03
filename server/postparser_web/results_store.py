@@ -13,6 +13,7 @@ POST_TEXT_FIELDS = (
     "text",
     "first_paragraph",
     "post_type",
+    "advertising_type",
     "image_url",
     "video_url",
 )
@@ -189,6 +190,7 @@ class ResultsStore:
                     text TEXT NOT NULL,
                     first_paragraph TEXT NOT NULL,
                     post_type TEXT NOT NULL,
+                    advertising_type TEXT,
                     image_url TEXT NOT NULL,
                     video_url TEXT NOT NULL,
                     views INTEGER,
@@ -213,6 +215,10 @@ class ResultsStore:
             if "reach" not in post_columns:
                 connection.execute(
                     "ALTER TABLE posts ADD COLUMN reach INTEGER"
+                )
+            if "advertising_type" not in post_columns:
+                connection.execute(
+                    "ALTER TABLE posts ADD COLUMN advertising_type TEXT"
                 )
             connection.execute(
                 """
@@ -448,6 +454,7 @@ class ResultsStore:
                         text,
                         first_paragraph,
                         post_type,
+                        advertising_type,
                         image_url,
                         video_url,
                         views,
@@ -458,7 +465,7 @@ class ResultsStore:
                         shares,
                         forwards
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (normalized_run_id,) + values,
                 )
@@ -508,6 +515,7 @@ class ResultsStore:
                 posts.text,
                 posts.first_paragraph,
                 posts.post_type,
+                posts.advertising_type,
                 posts.image_url,
                 posts.video_url,
                 posts.views,

@@ -1,4 +1,5 @@
 import os
+import re
 from typing import Any
 
 from server.postparser_web.instagram_parser import (
@@ -170,6 +171,69 @@ def _required_group_string(
     return value.strip()
 
 
+def _normalize_advertising_text(value: Any) -> str:
+    text = str(value or "").lower().replace("ё", "е")
+    text = re.sub(
+        r"[^a-zа-я0-9]+",
+        " ",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _advertising_words(value: Any) -> list[str]:
+    source = value if isinstance(value, list) else str(value or "").split(",")
+    result = []
+    used = set()
+
+    for item in source:
+        cleaned = re.sub(r"\s+", " ", str(item or "").strip())
+        normalized = _normalize_advertising_text(cleaned)
+        if not normalized or normalized in used:
+            continue
+        used.add(normalized)
+        result.append(cleaned)
+
+    return result
+
+
+def _advertising_type(text: Any, advertising_types: Any) -> str:
+    if not isinstance(advertising_types, list):
+        return ""
+
+    normalized_text = _normalize_advertising_text(text)
+    for rule in advertising_types:
+        if not isinstance(rule, dict):
+            continue
+        type_name = str(rule.get("type") or "").strip()
+        if not type_name:
+            continue
+        for word in _advertising_words(rule.get("postWords", [])):
+            normalized_word = _normalize_advertising_text(word)
+            if (
+                normalized_text
+                and normalized_word
+                and f" {normalized_word} " in f" {normalized_text} "
+            ):
+                return type_name
+
+    return ""
+
+
+def _add_advertising_types(
+    posts: list[Any],
+    advertising_types: Any,
+) -> list[Any]:
+    for post in posts:
+        if isinstance(post, dict):
+            post["advertising_type"] = _advertising_type(
+                post.get("text"),
+                advertising_types,
+            )
+    return posts
+
+
 class ParseService:
     def __init__(
         self,
@@ -286,6 +350,8 @@ class ParseService:
             raise ParserExecutionError(
                 f"Парсер сети «{network}» вернул некорректный результат."
             )
+
+        _add_advertising_types(posts, group.get("advertisingTypes", []))
 
         warning = str(getattr(parser, "warning", "") or "").strip()
 

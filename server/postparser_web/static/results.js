@@ -274,6 +274,11 @@
       appendPublicationCell(row, post);
       appendPostTextCell(row, post.text);
       appendCell(row, String(post.post_type || "—"));
+      appendCell(
+        row,
+        String(post.advertising_type || "—"),
+        "advertising-type-cell"
+      );
       appendCell(row, formatMetric(post.views), "metric-cell");
       appendCell(row, formatMetric(post.likes), "metric-cell");
       appendCell(row, formatMetric(post.comments), "metric-cell");

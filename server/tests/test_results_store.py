@@ -229,6 +229,111 @@ class ResultsStoreTestCase(unittest.TestCase):
         self.assertEqual(inserted, 2)
         self.assertEqual(len(self.store.get_posts()), 2)
 
+    def test_advertising_type_is_saved_and_missing_value_is_empty(self):
+        run_id = self.store.create_run("group_1", "Группа", "vk")
+
+        self.store.save_posts(
+            run_id,
+            [
+                make_post("vk", "advertising", advertising_type="Реклама"),
+                make_post("vk", "ordinary"),
+            ],
+        )
+
+        posts = {
+            post["external_id"]: post
+            for post in self.store.get_posts()
+        }
+        self.assertEqual(posts["advertising"]["advertising_type"], "Реклама")
+        self.assertEqual(posts["ordinary"]["advertising_type"], "")
+
+    def test_existing_posts_table_is_migrated_idempotently(self):
+        legacy_path = (
+            pathlib.Path(self.temporary_directory.name)
+            / "legacy_posts.sqlite3"
+        )
+        connection = sqlite3.connect(legacy_path)
+        try:
+            connection.execute(
+                """
+                CREATE TABLE parse_runs (
+                    id INTEGER PRIMARY KEY,
+                    group_id TEXT NOT NULL,
+                    group_name TEXT NOT NULL,
+                    network TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT NOT NULL,
+                    count INTEGER NOT NULL,
+                    warning TEXT NOT NULL DEFAULT ''
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE posts (
+                    id INTEGER PRIMARY KEY,
+                    run_id INTEGER NOT NULL,
+                    source TEXT NOT NULL,
+                    external_id TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    published_at TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    first_paragraph TEXT NOT NULL,
+                    post_type TEXT NOT NULL,
+                    image_url TEXT NOT NULL,
+                    video_url TEXT NOT NULL,
+                    views INTEGER,
+                    reach INTEGER,
+                    likes INTEGER NOT NULL,
+                    comments INTEGER NOT NULL,
+                    saved INTEGER NOT NULL,
+                    shares INTEGER NOT NULL,
+                    forwards INTEGER NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO parse_runs
+                    (id, group_id, group_name, network, status,
+                     started_at, finished_at, count, warning)
+                VALUES (1, 'legacy', 'Legacy', 'vk', 'completed',
+                        'start', 'finish', 1, '')
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO posts
+                    (run_id, source, external_id, url, published_at, text,
+                     first_paragraph, post_type, image_url, video_url,
+                     views, reach, likes, comments, saved, shares, forwards)
+                VALUES
+                    (1, 'vk', 'old', 'https://example.test/old', 'date',
+                     'text', 'text', 'Текст', '', '', 1, 1, 1, 1, 1, 1, 1)
+                """
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        ResultsStore(legacy_path)
+        migrated_store = ResultsStore(legacy_path)
+
+        connection = sqlite3.connect(legacy_path)
+        try:
+            columns = [
+                row[1]
+                for row in connection.execute(
+                    "PRAGMA table_info(posts)"
+                ).fetchall()
+            ]
+        finally:
+            connection.close()
+
+        self.assertEqual(columns.count("advertising_type"), 1)
+        self.assertIsNone(migrated_store.get_posts()[0]["advertising_type"])
+
     def test_posts_are_returned_and_can_be_filtered(self):
         vk_run = self.store.create_run("vk_group", "VK", "vk")
         tg_run = self.store.create_run("tg_group", "Telegram", "telegram")
@@ -348,6 +453,7 @@ class ResultsStoreTestCase(unittest.TestCase):
                     "text",
                     "first_paragraph",
                     "post_type",
+                    "advertising_type",
                     "image_url",
                     "video_url",
                 )
@@ -360,6 +466,7 @@ class ResultsStoreTestCase(unittest.TestCase):
                 "text": "",
                 "first_paragraph": "",
                 "post_type": "",
+                "advertising_type": "",
                 "image_url": "",
                 "video_url": "",
             },
