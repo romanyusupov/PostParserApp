@@ -43,6 +43,7 @@ def make_post(external_id="post_1", **values):
         "text": "Полный текст публикации",
         "first_paragraph": "Первый абзац",
         "post_type": "Фото",
+        "video_description": "Отдельное описание видео",
         "advertising_type": "Партнёрская публикация",
         "views": 10,
         "likes": 5,
@@ -134,6 +135,7 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
                 "Сеть",
                 "Группа",
                 "Тип",
+                "Описание видео",
                 "Тип рекламы",
                 "Текст",
                 "Первый абзац",
@@ -159,6 +161,7 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
                 "vk",
                 "ОГТ",
                 "Фото",
+                "Отдельное описание видео",
                 "Партнёрская публикация",
                 "Полный текст публикации",
                 "Первый абзац",
@@ -188,11 +191,21 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
         self.create_exporter().export_run(run_id)
 
         row = self.client.written_values[0][2][1]
-        self.assertEqual(row[8:], [0, 0, 0, 0, 7])
+        self.assertEqual(row[9:], [0, 0, 0, 0, 7])
 
     def test_old_post_without_advertising_type_exports_empty_cell(self):
         run_id = self.create_run(
             posts=[make_post(advertising_type=None)]
+        )
+
+        self.create_exporter().export_run(run_id)
+
+        row = self.client.written_values[0][2][1]
+        self.assertEqual(row[5], "")
+
+    def test_old_post_without_video_description_exports_empty_cell(self):
+        run_id = self.create_run(
+            posts=[make_post(video_description=None)]
         )
 
         self.create_exporter().export_run(run_id)
@@ -210,7 +223,7 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
 
         row = self.client.written_values[0][2][1]
         self.assertEqual(row[2], "Русская группа")
-        self.assertEqual(row[5], "Кириллица без потерь")
+        self.assertEqual(row[6], "Кириллица без потерь")
 
     def test_long_sheet_name_is_truncated(self):
         run_id = self.create_run(group_name="Я" * 150)

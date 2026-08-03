@@ -24,6 +24,7 @@ def make_post(
         "text": text,
         "first_paragraph": text,
         "post_type": "Текст",
+        "video_description": "Описание ролика",
         "image_url": "",
         "video_url": "",
         "views": 10,
@@ -229,14 +230,14 @@ class ResultsStoreTestCase(unittest.TestCase):
         self.assertEqual(inserted, 2)
         self.assertEqual(len(self.store.get_posts()), 2)
 
-    def test_advertising_type_is_saved_and_missing_value_is_empty(self):
+    def test_descriptions_and_advertising_type_are_saved(self):
         run_id = self.store.create_run("group_1", "Группа", "vk")
 
         self.store.save_posts(
             run_id,
             [
                 make_post("vk", "advertising", advertising_type="Реклама"),
-                make_post("vk", "ordinary"),
+                make_post("vk", "ordinary", video_description=None),
             ],
         )
 
@@ -246,6 +247,11 @@ class ResultsStoreTestCase(unittest.TestCase):
         }
         self.assertEqual(posts["advertising"]["advertising_type"], "Реклама")
         self.assertEqual(posts["ordinary"]["advertising_type"], "")
+        self.assertEqual(
+            posts["advertising"]["video_description"],
+            "Описание ролика",
+        )
+        self.assertEqual(posts["ordinary"]["video_description"], "")
 
     def test_existing_posts_table_is_migrated_idempotently(self):
         legacy_path = (
@@ -332,7 +338,10 @@ class ResultsStoreTestCase(unittest.TestCase):
             connection.close()
 
         self.assertEqual(columns.count("advertising_type"), 1)
-        self.assertIsNone(migrated_store.get_posts()[0]["advertising_type"])
+        self.assertEqual(columns.count("video_description"), 1)
+        migrated_post = migrated_store.get_posts()[0]
+        self.assertIsNone(migrated_post["advertising_type"])
+        self.assertIsNone(migrated_post["video_description"])
 
     def test_posts_are_returned_and_can_be_filtered(self):
         vk_run = self.store.create_run("vk_group", "VK", "vk")
@@ -453,6 +462,7 @@ class ResultsStoreTestCase(unittest.TestCase):
                     "text",
                     "first_paragraph",
                     "post_type",
+                    "video_description",
                     "advertising_type",
                     "image_url",
                     "video_url",
@@ -466,6 +476,7 @@ class ResultsStoreTestCase(unittest.TestCase):
                 "text": "",
                 "first_paragraph": "",
                 "post_type": "",
+                "video_description": "",
                 "advertising_type": "",
                 "image_url": "",
                 "video_url": "",

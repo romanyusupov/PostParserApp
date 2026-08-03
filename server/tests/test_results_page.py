@@ -49,6 +49,7 @@ def make_post(external_id="post_1"):
         "text": "Текст публикации",
         "first_paragraph": "Текст публикации",
         "post_type": "Фото",
+        "video_description": "Отдельное описание видео",
         "advertising_type": "Партнёрская публикация",
         "views": 10,
         "likes": 5,
@@ -80,6 +81,14 @@ class ResultsPageTestCase(unittest.TestCase):
 
     def get_script(self):
         response = self.client.get("/static/results.js")
+        try:
+            self.assertEqual(response.status_code, 200)
+            return response.get_data(as_text=True)
+        finally:
+            response.close()
+
+    def get_stylesheet(self):
+        response = self.client.get("/static/results.css")
         try:
             self.assertEqual(response.status_code, 200)
             return response.get_data(as_text=True)
@@ -144,14 +153,67 @@ class ResultsPageTestCase(unittest.TestCase):
             response.get_json()["posts"][0]["advertising_type"],
             "Партнёрская публикация",
         )
+        self.assertEqual(
+            response.get_json()["posts"][0]["video_description"],
+            "Отдельное описание видео",
+        )
 
     def test_advertising_type_column_and_empty_fallback_are_rendered(self):
         page = self.client.get("/results").get_data(as_text=True)
         script = self.get_script()
 
-        self.assertIn("<th scope=\"col\">Тип рекламы</th>", page)
+        self.assertIn("Тип рекламы", page)
         self.assertIn("post.advertising_type || \"—\"", script)
         self.assertIn("\"advertising-type-cell\"", script)
+
+    def test_video_description_uses_safe_independent_expansion(self):
+        page = self.client.get("/results").get_data(as_text=True)
+        script = self.get_script()
+
+        self.assertIn("Описание видео", page)
+        self.assertIn("post.video_description", script)
+        self.assertIn("appendExpandableTextCell(", script)
+        self.assertIn(
+            'appendExpandableTextCell(row, post.text, "post-text")',
+            script,
+        )
+        self.assertIn('"video-description-cell"', script)
+        self.assertGreaterEqual(script.count("appendExpandableTextCell("), 3)
+        self.assertIn(
+            "content.textContent = expanded ? collapsed.text : text;",
+            script,
+        )
+        self.assertNotIn("innerHTML", script)
+
+    def test_results_columns_are_in_required_order(self):
+        page = self.client.get("/results").get_data(as_text=True)
+        posts_section = page.index('id="postsSection"')
+        headings = (
+            "Дата",
+            "Публикация",
+            "Текст",
+            "Тип",
+            "Описание видео",
+            "Тип рекламы",
+            "Просмотры",
+            "Лайки",
+            "Комментарии",
+        )
+
+        positions = [page.index(heading, posts_section) for heading in headings]
+
+        self.assertEqual(positions, sorted(positions))
+
+    def test_results_layout_is_wider_and_keeps_safe_word_wrapping(self):
+        stylesheet = self.get_stylesheet()
+
+        self.assertIn("width: min(1480px, calc(100% - 32px));", stylesheet)
+        self.assertIn("min-width: 1440px;", stylesheet)
+        self.assertIn("min-width: 280px;", stylesheet)
+        self.assertIn("min-width: 170px;", stylesheet)
+        self.assertIn("overflow-wrap: break-word;", stylesheet)
+        self.assertIn("word-break: normal;", stylesheet)
+        self.assertIn("overflow-x: auto;", stylesheet)
 
     def test_empty_data_has_empty_api_and_page_states(self):
         runs_response = self.client.get("/api/v1/results/runs")

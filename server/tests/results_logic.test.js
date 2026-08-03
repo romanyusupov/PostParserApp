@@ -82,6 +82,15 @@ test("collapsed text is limited and preserves literal HTML and emoji", function 
   assert.ok(Array.from(result.text).length <= 301);
 });
 
+test("video description collapse preserves literal HTML and emoji", function () {
+  const description = "<b>Не HTML</b> 🎬\n" + "Описание ".repeat(50);
+  const result = resultsLogic.collapsedText(description, 300, 6);
+
+  assert.equal(result.shortened, true);
+  assert.match(result.text, /^<b>Не HTML<\/b> 🎬/);
+  assert.ok(Array.from(result.text).length <= 301);
+});
+
 test("text with more than six lines is collapsed", function () {
   const result = resultsLogic.collapsedText(
     "one\ntwo\nthree\nfour\nfive\nsix\nseven",

@@ -311,6 +311,7 @@ class TelegramPostNormalizationTestCase(unittest.TestCase):
 
         self.assertEqual(result["post_type"], "Видео")
         self.assertEqual(result["video_url"], "https://media.test/video")
+        self.assertEqual(result["video_description"], "")
 
     def test_views_are_read(self):
         result = normalize_telegram_post(

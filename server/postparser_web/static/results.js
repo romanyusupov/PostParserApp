@@ -146,8 +146,8 @@
     cell.appendChild(linkContainer);
   }
 
-  function appendPostTextCell(row, value) {
-    const cell = appendCell(row, "", "post-text");
+  function appendExpandableTextCell(row, value, className) {
+    const cell = appendCell(row, "", className);
     const text = value === null || value === undefined ? "" : String(value);
 
     if (!text.trim()) {
@@ -272,8 +272,17 @@
       const row = createElement("tr");
       appendCell(row, formatDate(post.published_at));
       appendPublicationCell(row, post);
-      appendPostTextCell(row, post.text);
-      appendCell(row, String(post.post_type || "—"));
+      appendExpandableTextCell(row, post.text, "post-text");
+      appendCell(
+        row,
+        String(post.post_type || "—"),
+        "post-type-cell"
+      );
+      appendExpandableTextCell(
+        row,
+        post.video_description,
+        "video-description-cell"
+      );
       appendCell(
         row,
         String(post.advertising_type || "—"),

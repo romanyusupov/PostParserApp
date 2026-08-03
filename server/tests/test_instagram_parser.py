@@ -133,6 +133,7 @@ class InstagramPostNormalizationTestCase(unittest.TestCase):
         result = normalize_instagram_post(make_media(media_type="IMAGE"))
 
         self.assertEqual(result["post_type"], "Фото")
+        self.assertEqual(result["video_description"], "")
 
     def test_carousel_is_converted_to_carousel(self):
         result = normalize_instagram_post(

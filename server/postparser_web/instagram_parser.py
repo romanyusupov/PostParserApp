@@ -223,6 +223,7 @@ def normalize_instagram_post(
         "text": caption,
         "first_paragraph": first_nonempty_paragraph(caption),
         "post_type": get_instagram_post_type(media_item),
+        "video_description": "",
         "image_url": get_instagram_image_url(
             media_item,
             carousel_image_url,

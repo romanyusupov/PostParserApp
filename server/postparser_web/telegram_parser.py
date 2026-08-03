@@ -179,6 +179,7 @@ def normalize_telegram_post(
         "text": text,
         "first_paragraph": first_nonempty_paragraph(text),
         "post_type": get_telegram_post_type(message),
+        "video_description": "",
         "image_url": image_url,
         "video_url": video_url,
         "views": max(0, _safe_int(getattr(message, "views", 0))),
