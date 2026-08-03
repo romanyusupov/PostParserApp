@@ -1,0 +1,35 @@
+<nav class="app-navigation" aria-label="Разделы приложения">
+  <div
+    id="parentTabList"
+    class="parent-tabs"
+    role="tablist"
+    aria-label="Основные разделы"
+  >
+    <a
+      id="settingsParentTab"
+      class="parent-tab{% if active_section == 'settings' %} is-active{% endif %}"
+      href="/shadow/settings"
+      role="tab"
+      aria-selected="{{ 'true' if active_section == 'settings' else 'false' }}"
+      aria-controls="settingsPanel"
+      tabindex="{{ '0' if active_section == 'settings' else '-1' }}"
+    >Настройки</a>
+    <a
+      id="resultsParentTab"
+      class="parent-tab{% if active_section == 'results' %} is-active{% endif %}"
+      href="/results"
+      role="tab"
+      aria-selected="{{ 'true' if active_section == 'results' else 'false' }}"
+      aria-controls="resultsPanel"
+      tabindex="{{ '0' if active_section == 'results' else '-1' }}"
+    >Результаты</a>
+  </div>
+  <div class="group-tabs-scroll">
+    <div
+      id="groupTabs"
+      class="group-tabs"
+      role="tablist"
+      aria-label="Группы"
+    ></div>
+  </div>
+</nav>

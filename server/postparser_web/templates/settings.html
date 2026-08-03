@@ -9,12 +9,23 @@
       href="{{ url_for('static', filename='settings.css') }}"
     >
     <script
+      src="{{ url_for('static', filename='app_tabs.js') }}"
+      defer
+    ></script>
+    <script
       src="{{ url_for('static', filename='settings.js') }}"
       defer
     ></script>
   </head>
   <body>
     <main class="page-shell">
+      {% include "_app_navigation.html" %}
+      <section
+        id="settingsPanel"
+        class="application-panel"
+        role="tabpanel"
+        aria-labelledby="settingsParentTab"
+      >
       <header class="page-header">
         <div>
           <div class="eyebrow">Тестовый серверный интерфейс</div>
@@ -58,14 +69,6 @@
         class="groups"
         aria-label="Группы парсера"
       ></section>
-
-      <section aria-labelledby="parseLaunchTitle">
-        <h2 id="parseLaunchTitle">Запуск парсинга</h2>
-        <div
-          id="parseGroupsContainer"
-          class="groups"
-          aria-live="polite"
-        ></div>
       </section>
     </main>
   </body>

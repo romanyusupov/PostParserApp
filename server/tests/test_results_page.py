@@ -108,6 +108,7 @@ class ResultsPageTestCase(unittest.TestCase):
         self.assertIn("Группа", page)
         self.assertIn("Просмотры", page)
         self.assertIn("/static/results.js", page)
+        self.assertIn("/static/app_tabs.js", page)
         self.assertIn("/static/results.css", page)
         self.assertIn("/static/results_logic.js", page)
 
@@ -130,6 +131,53 @@ class ResultsPageTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["runs"][0]["id"], run_id)
         self.assertEqual(response.get_json()["runs"][0]["count"], 3)
+        self.assertEqual(response.get_json()["runs"][0]["group_id"], "group_1")
+        self.assertEqual(response.get_json()["runs"][0]["group_name"], "Группа")
+        self.assertEqual(response.get_json()["runs"][0]["network"], "vk")
+
+    def test_results_parent_tab_and_group_tabs_are_accessible(self):
+        page = self.client.get("/results").get_data(as_text=True)
+        script = self.get_script()
+
+        self.assertIn('id="resultsParentTab"', page)
+        self.assertIn('aria-selected="true"', page)
+        self.assertIn('id="groupTabs"', page)
+        self.assertIn('role="tablist"', page)
+        self.assertIn("tabs.renderGroupTabs(", script)
+        self.assertIn("tabs.setupParentTabs(parentTabList);", script)
+
+    def test_results_are_filtered_by_stable_group_id(self):
+        script = self.get_script()
+
+        self.assertIn("visibleRuns = allRuns.filter(function (run)", script)
+        self.assertIn('String(run.group_id || "") === activeGroupId', script)
+        self.assertNotIn("run.group_name === activeGroup", script)
+        self.assertIn("const selectedRun = requestedRun || visibleRuns[0]", script)
+
+    def test_results_url_preserves_group_and_run_and_supports_history(self):
+        script = self.get_script()
+
+        self.assertIn("tabs.readUrlState(window.location.search)", script)
+        self.assertIn("tabs.updateUrl(", script)
+        self.assertIn("tabs.updateParentLinks(activeGroupId", script)
+        self.assertIn('window.addEventListener("popstate"', script)
+        self.assertIn("selectedRun ? selectedRun.id", script)
+        self.assertIn("pendingSelectionNotice", script)
+        self.assertIn("Указанная группа не найдена", script)
+
+    def test_archived_groups_are_merged_without_losing_runs(self):
+        script = self.get_script()
+
+        self.assertIn("allGroups = tabs.mergeGroups(settingsGroups, allRuns);", script)
+        self.assertIn("currentGroup ? currentGroup.name : run.group_name", script)
+
+    def test_run_warning_is_rendered(self):
+        page = self.client.get("/results").get_data(as_text=True)
+        script = self.get_script()
+
+        self.assertIn("Предупреждение", page)
+        self.assertIn('String(run.warning || "—")', script)
+        self.assertIn('"run-warning-cell"', script)
 
     def test_posts_api_returns_only_selected_run_posts(self):
         selected_run = self.results_store.create_run(

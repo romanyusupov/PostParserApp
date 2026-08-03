@@ -15,7 +15,10 @@ def _internal_error_response():
 
 @results_bp.get("/results")
 def results_page():
-    return render_template("results.html")
+    return render_template(
+        "results.html",
+        active_section="results",
+    )
 
 
 @results_bp.get("/api/v1/results/runs")

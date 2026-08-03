@@ -13,6 +13,10 @@
       href="{{ url_for('static', filename='results.css') }}"
     >
     <script
+      src="{{ url_for('static', filename='app_tabs.js') }}"
+      defer
+    ></script>
+    <script
       src="{{ url_for('static', filename='results_logic.js') }}"
       defer
     ></script>
@@ -23,6 +27,13 @@
   </head>
   <body>
     <main class="page-shell">
+      {% include "_app_navigation.html" %}
+      <section
+        id="resultsPanel"
+        class="application-panel"
+        role="tabpanel"
+        aria-labelledby="resultsParentTab"
+      >
       <header class="page-header">
         <div>
           <div class="eyebrow">Shadow-интерфейс</div>
@@ -31,11 +42,9 @@
             Выберите запуск, чтобы посмотреть сохранённые публикации.
           </p>
         </div>
-        <a class="button button-ghost page-link" href="/shadow/settings">
-          Настройки
-        </a>
       </header>
 
+      <div id="groupPanel" role="tabpanel">
       <div id="statusMessage" class="status status-info" role="status" aria-live="polite">
         Загружаем запуски…
       </div>
@@ -52,6 +61,7 @@
                   <th scope="col">Дата</th>
                   <th scope="col">Статус</th>
                   <th scope="col">Количество</th>
+                  <th scope="col">Предупреждение</th>
                   <th scope="col"><span class="visually-hidden">Действие</span></th>
                 </tr>
               </thead>
@@ -177,6 +187,8 @@
             В этом запуске нет публикаций.
           </p>
         </div>
+      </section>
+      </div>
       </section>
     </main>
   </body>

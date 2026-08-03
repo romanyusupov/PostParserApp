@@ -105,6 +105,16 @@ tbody tr:last-child td {
   border-bottom: 0;
 }
 
+tbody tr.is-selected td {
+  background: #eff6ff;
+}
+
+.run-warning-cell {
+  max-width: 280px;
+  color: #92400e;
+  overflow-wrap: break-word;
+}
+
 .post-text {
   min-width: 0;
 }

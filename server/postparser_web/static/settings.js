@@ -5,6 +5,7 @@
   const parseApiUrl = "/api/v1/parse";
   const runsApiUrl = "/api/v1/runs/";
   const pollIntervalMilliseconds = 2000;
+  const tabs = window.PostParserTabs;
 
   const revisionValue = document.getElementById("revisionValue");
   const addGroupButton = document.getElementById("addGroupButton");
@@ -13,14 +14,21 @@
   const statusMessage = document.getElementById("statusMessage");
   const emptyState = document.getElementById("emptyState");
   const groupsContainer = document.getElementById("groupsContainer");
-  const parseGroupsContainer = document.getElementById(
-    "parseGroupsContainer"
-  );
+  const groupTabs = document.getElementById("groupTabs");
+  const parentTabList = document.getElementById("parentTabList");
 
   let revision = 0;
   let groups = [];
+  let activeGroupId = "";
+  let hasUnsavedChanges = false;
   let requestInProgress = false;
   const parseStates = new Map();
+
+  tabs.setupParentTabs(parentTabList);
+
+  function markDirty() {
+    hasUnsavedChanges = true;
+  }
 
   function createElement(tagName, className, text) {
     const element = document.createElement(tagName);
@@ -114,9 +122,12 @@
     };
   }
 
-  function createField(labelText, input) {
+  function createField(labelText, input, visuallyHiddenLabel) {
     const field = createElement("label", "field");
     const label = createElement("span", "field-label", labelText);
+    if (visuallyHiddenLabel) {
+      label.classList.add("visually-hidden");
+    }
     field.appendChild(label);
     field.appendChild(input);
     return field;
@@ -128,6 +139,7 @@
     input.value = value;
     input.placeholder = placeholder;
     input.addEventListener("input", function () {
+      markDirty();
       onInput(input.value);
     });
     return input;
@@ -138,6 +150,7 @@
     input.type = "date";
     input.value = value;
     input.addEventListener("input", function () {
+      markDirty();
       onInput(input.value);
     });
     return input;
@@ -159,6 +172,7 @@
     });
 
     select.addEventListener("change", function () {
+      markDirty();
       onInput(select.value);
     });
 
@@ -182,10 +196,11 @@
 
   function createWordsTextarea(words, placeholder, onInput) {
     const textarea = createElement("textarea", "textarea");
-    textarea.rows = 5;
+    textarea.rows = 2;
     textarea.value = wordsToText(words);
     textarea.placeholder = placeholder;
     textarea.addEventListener("input", function () {
+      markDirty();
       onInput(textToWords(textarea.value));
     });
     return textarea;
@@ -210,118 +225,164 @@
 
   function renderAdvertisingType(group, groupIndex, typeIndex) {
     const advertisingType = group.advertisingTypes[typeIndex];
-    const card = createElement("article", "type-card");
-    const header = createElement("div", "type-header");
-    const title = createElement(
-      "h4",
-      "",
-      "Тип рекламы " + (typeIndex + 1)
+    const row = createElement("article", "type-row");
+    const typeInput = createTextInput(
+      advertisingType.type,
+      "Например, прямая реклама",
+      function (value) {
+        groups[groupIndex].advertisingTypes[typeIndex].type = value;
+      }
     );
+    const postWords = createWordsTextarea(
+      advertisingType.postWords,
+      "Одно слово или фраза на строке",
+      function (value) {
+        groups[groupIndex].advertisingTypes[typeIndex].postWords = value;
+      }
+    );
+    const showsVideoWords = ["vk", "instagram"].includes(group.network);
     const deleteButton = createButton(
-      "Удалить тип",
-      "button button-danger button-small",
+      "×",
+      "button button-danger type-row-delete",
       function () {
         group.advertisingTypes.splice(typeIndex, 1);
+        markDirty();
         renderGroups();
       }
     );
-
-    header.appendChild(title);
-    header.appendChild(deleteButton);
-    card.appendChild(header);
-
-    card.appendChild(
-      createField(
-        "Название типа",
-        createTextInput(
-          advertisingType.type,
-          "Например, прямая реклама",
-          function (value) {
-            groups[groupIndex].advertisingTypes[typeIndex].type = value;
-          }
-        )
-      )
+    deleteButton.title = "Удалить тип рекламы " + (typeIndex + 1);
+    deleteButton.setAttribute(
+      "aria-label",
+      "Удалить тип рекламы " + (typeIndex + 1)
     );
+    typeInput.setAttribute("aria-label", "Название типа рекламы");
+    postWords.setAttribute("aria-label", "Поиск в тексте поста");
 
-    const wordsGrid = createElement("div", "words-grid");
-    wordsGrid.appendChild(
-      createField(
-        "Ключевые слова постов",
-        createWordsTextarea(
-          advertisingType.postWords,
-          "Одно слово или фраза на строке",
-          function (value) {
-            groups[groupIndex].advertisingTypes[typeIndex].postWords =
-              value;
-          }
-        )
-      )
+    row.appendChild(
+      createField("Название типа рекламы", typeInput, true)
     );
-
-    const showsVideoWords = ["vk", "instagram"].includes(group.network);
+    row.appendChild(
+      createField("Поиск в тексте поста", postWords, true)
+    );
 
     if (showsVideoWords) {
-      wordsGrid.appendChild(
+      const videoWords = createWordsTextarea(
+        advertisingType.videoWords,
+        "Одно слово или фраза на строке",
+        function (value) {
+          groups[groupIndex].advertisingTypes[typeIndex].videoWords = value;
+        }
+      );
+      videoWords.setAttribute(
+        "aria-label",
+        "Поиск в описании видео"
+      );
+      row.appendChild(
         createField(
-          "Ключевые слова видео",
-          createWordsTextarea(
-            advertisingType.videoWords,
-            "Одно слово или фраза на строке",
-            function (value) {
-              groups[groupIndex].advertisingTypes[typeIndex].videoWords =
-                value;
-            }
-          )
+          "Поиск в описании видео",
+          videoWords,
+          true
         )
       );
+    } else {
+      const unavailable = createElement(
+        "div",
+        "type-video-unavailable",
+        "—"
+      );
+      unavailable.setAttribute(
+        "aria-label",
+        "Поиск в описании видео недоступен"
+      );
+      row.appendChild(unavailable);
     }
 
-    card.appendChild(wordsGrid);
-
-    return card;
+    row.appendChild(deleteButton);
+    return row;
   }
 
   function renderGroup(group, groupIndex) {
     const card = createElement("article", "group-card");
+    card.id = "groupPanel";
+    card.setAttribute("role", "tabpanel");
+    const activeTab = groupTabs.querySelector('[aria-selected="true"]');
+    if (activeTab) {
+      card.setAttribute("aria-labelledby", activeTab.id);
+    }
     const header = createElement("div", "group-header");
     const title = createElement(
       "h2",
       "",
       group.name || "Группа " + (groupIndex + 1)
     );
+    const headerActions = createElement("div", "toolbar-actions");
+    const state = getParseState(group.id);
+    const launchButton = createButton(
+      state.busy ? "Запуск…" : "Запустить",
+      "button button-primary",
+      function () {
+        launchParse(group.id);
+      }
+    );
     const deleteButton = createButton(
       "Удалить группу",
       "button button-danger",
       function () {
+        const nextGroup = groups[groupIndex + 1] || groups[groupIndex - 1];
         groups.splice(groupIndex, 1);
+        activeGroupId = nextGroup ? nextGroup.id : "";
+        markDirty();
+        tabs.updateUrl(
+          window.location.pathname,
+          activeGroupId,
+          "",
+          "replace"
+        );
         renderGroups();
         setStatus("Группа удалена из формы. Сохраните изменения.", "info");
       }
     );
+    launchButton.disabled = state.busy;
 
     header.appendChild(title);
-    header.appendChild(deleteButton);
+    headerActions.appendChild(deleteButton);
+    header.appendChild(headerActions);
     card.appendChild(header);
 
-    const fieldsGrid = createElement("div", "fields-grid");
-    fieldsGrid.appendChild(
-      createField(
-        "ID",
-        createTextInput(group.id, "Уникальный ID", function (value) {
-          groups[groupIndex].id = value;
-        })
-      )
+    const identityGrid = createElement(
+      "div",
+      "fields-grid identity-grid"
     );
-    fieldsGrid.appendChild(
+    const idInput = createTextInput(group.id, "Уникальный ID", function () {});
+    const idField = createField("ID", idInput);
+    idInput.readOnly = true;
+    idField.classList.add("id-field");
+    identityGrid.appendChild(idField);
+    identityGrid.appendChild(
       createField(
         "Название",
         createTextInput(group.name, "Название группы", function (value) {
           groups[groupIndex].name = value;
           title.textContent = value || "Группа " + (groupIndex + 1);
+          renderGroupTabs();
         })
       )
     );
-    fieldsGrid.appendChild(
+    identityGrid.appendChild(
+      createField(
+        "URL",
+        createTextInput(group.url, "https://…", function (value) {
+          groups[groupIndex].url = value;
+        })
+      )
+    );
+    card.appendChild(identityGrid);
+
+    const scheduleGrid = createElement(
+      "div",
+      "fields-grid schedule-grid"
+    );
+    scheduleGrid.appendChild(
       createField(
         "Социальная сеть",
         createNetworkSelect(group.network, function (value) {
@@ -339,15 +400,7 @@
         })
       )
     );
-    fieldsGrid.appendChild(
-      createField(
-        "URL",
-        createTextInput(group.url, "https://…", function (value) {
-          groups[groupIndex].url = value;
-        })
-      )
-    );
-    fieldsGrid.appendChild(
+    scheduleGrid.appendChild(
       createField(
         "Дата начала",
         createDateInput(group.dateStart, function (value) {
@@ -355,7 +408,7 @@
         })
       )
     );
-    fieldsGrid.appendChild(
+    scheduleGrid.appendChild(
       createField(
         "Дата окончания",
         createDateInput(group.dateEnd, function (value) {
@@ -363,14 +416,14 @@
         })
       )
     );
-    card.appendChild(fieldsGrid);
+    card.appendChild(scheduleGrid);
 
     const typesSection = createElement("section", "types-section");
     const typesHeader = createElement("div", "types-heading");
     typesHeader.appendChild(createElement("h3", "", "Типы рекламы"));
     typesHeader.appendChild(
       createButton(
-        "Добавить тип рекламы",
+        "+ Добавить тип",
         "button button-secondary button-small",
         function () {
           group.advertisingTypes.push({
@@ -378,6 +431,7 @@
             postWords: [],
             videoWords: [],
           });
+          markDirty();
           renderGroups();
         }
       )
@@ -393,6 +447,23 @@
         )
       );
     } else {
+      const columnsHeader = createElement(
+        "div",
+        "type-columns-header"
+      );
+      columnsHeader.appendChild(
+        createElement("span", "", "Название типа рекламы")
+      );
+      columnsHeader.appendChild(
+        createElement("span", "", "Поиск в тексте поста")
+      );
+      columnsHeader.appendChild(
+        createElement("span", "", "Поиск в описании видео")
+      );
+      columnsHeader.appendChild(
+        createElement("span", "visually-hidden", "Действия")
+      );
+      typesSection.appendChild(columnsHeader);
       group.advertisingTypes.forEach(function (_, typeIndex) {
         typesSection.appendChild(
           renderAdvertisingType(group, groupIndex, typeIndex)
@@ -401,6 +472,22 @@
     }
 
     card.appendChild(typesSection);
+
+    const parsePanel = createElement("div", "parse-panel");
+    const parseLabel = createElement(
+      "strong",
+      "",
+      "Запуск парсинга выбранной группы"
+    );
+    parsePanel.appendChild(parseLabel);
+    if (state.message) {
+      const message = createElement("p", "status", state.message);
+      message.classList.add("status-" + state.messageType);
+      message.setAttribute("role", "status");
+      parsePanel.appendChild(message);
+    }
+    parsePanel.appendChild(launchButton);
+    card.appendChild(parsePanel);
     return card;
   }
 
@@ -433,53 +520,6 @@
     }
   }
 
-  function renderParseLaunch() {
-    parseGroupsContainer.replaceChildren();
-
-    if (groups.length === 0) {
-      parseGroupsContainer.appendChild(
-        createElement(
-          "p",
-          "types-empty",
-          "Добавьте и сохраните группу, чтобы запустить парсинг."
-        )
-      );
-      return;
-    }
-
-    groups.forEach(function (group, groupIndex) {
-      const state = getParseState(group.id);
-      const card = createElement("article", "group-card");
-      const header = createElement("div", "group-header");
-      const title = createElement(
-        "h2",
-        "",
-        group.name || "Группа " + (groupIndex + 1)
-      );
-      const launchButton = createButton(
-        state.busy ? "Запуск…" : "Запустить",
-        "button button-primary",
-        function () {
-          launchParse(group.id);
-        }
-      );
-      launchButton.disabled = state.busy;
-
-      header.appendChild(title);
-      header.appendChild(launchButton);
-      card.appendChild(header);
-
-      if (state.message) {
-        const message = createElement("p", "status", state.message);
-        message.classList.add("status-" + state.messageType);
-        message.setAttribute("role", "status");
-        card.appendChild(message);
-      }
-
-      parseGroupsContainer.appendChild(card);
-    });
-  }
-
   function scheduleRunPoll(groupId, runId) {
     window.setTimeout(function () {
       pollRun(groupId, runId);
@@ -505,7 +545,7 @@
       if (data.run.status === "running") {
         state.message = "Парсинг выполняется...";
         state.messageType = "info";
-        renderParseLaunch();
+        renderGroups();
         scheduleRunPoll(groupId, runId);
         return;
       }
@@ -531,7 +571,7 @@
       state.messageType = "error";
     }
 
-    renderParseLaunch();
+    renderGroups();
   }
 
   async function launchParse(groupId) {
@@ -544,7 +584,7 @@
     state.busy = true;
     state.message = "Создаём запуск...";
     state.messageType = "info";
-    renderParseLaunch();
+    renderGroups();
 
     try {
       const response = await fetch(parseApiUrl, {
@@ -563,7 +603,7 @@
 
       state.message = "Запуск создан. runId: " + String(data.runId);
       state.messageType = "success";
-      renderParseLaunch();
+      renderGroups();
       scheduleRunPoll(groupId, data.runId);
     } catch (error) {
       state.busy = false;
@@ -572,19 +612,47 @@
           ? error.message
           : "Не удалось создать запуск.";
       state.messageType = "error";
-      renderParseLaunch();
+      renderGroups();
     }
+  }
+
+  function renderGroupTabs() {
+    activeGroupId = tabs.renderGroupTabs(
+      groupTabs,
+      groups,
+      activeGroupId,
+      function (groupId) {
+        selectGroup(groupId, "push");
+      }
+    );
+    tabs.updateParentLinks(activeGroupId, "");
+  }
+
+  function selectGroup(groupId, historyMode) {
+    activeGroupId = tabs.selectedGroupId(groups, groupId);
+    tabs.updateUrl(
+      window.location.pathname,
+      activeGroupId,
+      "",
+      historyMode || "replace"
+    );
+    renderGroups();
   }
 
   function renderGroups() {
     groupsContainer.replaceChildren();
     emptyState.hidden = groups.length !== 0;
+    renderGroupTabs();
 
-    groups.forEach(function (group, groupIndex) {
-      groupsContainer.appendChild(renderGroup(group, groupIndex));
+    const groupIndex = groups.findIndex(function (group) {
+      return group.id === activeGroupId;
     });
 
-    renderParseLaunch();
+    if (groupIndex >= 0) {
+      groupsContainer.appendChild(
+        renderGroup(groups[groupIndex], groupIndex)
+      );
+    }
   }
 
   async function loadSettings() {
@@ -610,9 +678,20 @@
         data.settings && Array.isArray(data.settings.groups)
           ? data.settings.groups.map(normalizeLoadedGroup)
           : [];
+      activeGroupId = tabs.selectedGroupId(
+        groups,
+        tabs.readUrlState(window.location.search).groupId
+      );
+      hasUnsavedChanges = false;
 
       revisionValue.textContent = String(revision);
       renderGroups();
+      tabs.updateUrl(
+        window.location.pathname,
+        activeGroupId,
+        "",
+        "replace"
+      );
       setStatus("Настройки загружены.", "success");
     } catch (error) {
       setStatus(
@@ -678,6 +757,8 @@
 
       revision = data.revision;
       groups = data.settings.groups.map(normalizeLoadedGroup);
+      activeGroupId = tabs.selectedGroupId(groups, activeGroupId);
+      hasUnsavedChanges = false;
       revisionValue.textContent = String(revision);
       renderGroups();
       setStatus("Настройки успешно сохранены.", "success");
@@ -692,7 +773,7 @@
   }
 
   addGroupButton.addEventListener("click", function () {
-    groups.push({
+    const newGroup = {
       id: createTemporaryId(),
       name: "",
       network: "vk",
@@ -700,12 +781,42 @@
       dateStart: "",
       dateEnd: "",
       advertisingTypes: [],
-    });
+    };
+    groups.push(newGroup);
+    activeGroupId = newGroup.id;
+    markDirty();
+    tabs.updateUrl(
+      window.location.pathname,
+      activeGroupId,
+      "",
+      "push"
+    );
     renderGroups();
     setStatus("Новая группа добавлена. Заполните поля.", "info");
   });
 
-  reloadButton.addEventListener("click", loadSettings);
+  reloadButton.addEventListener("click", function () {
+    if (
+      !hasUnsavedChanges ||
+      window.confirm("Несохранённые изменения будут потеряны. Перезагрузить?")
+    ) {
+      loadSettings();
+    }
+  });
   saveButton.addEventListener("click", saveSettings);
+  window.addEventListener("popstate", function () {
+    activeGroupId = tabs.selectedGroupId(
+      groups,
+      tabs.readUrlState(window.location.search).groupId
+    );
+    renderGroups();
+  });
+  window.addEventListener("beforeunload", function (event) {
+    if (!hasUnsavedChanges) {
+      return;
+    }
+    event.preventDefault();
+    event.returnValue = "";
+  });
   loadSettings();
 })();

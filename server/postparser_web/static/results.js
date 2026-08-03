@@ -2,7 +2,9 @@
 
 (function () {
   const runsApiUrl = "/api/v1/results/runs";
+  const settingsApiUrl = "/api/v1/settings";
   const resultsLogic = window.PostParserResults;
+  const tabs = window.PostParserTabs;
   const collapsedTextCharacters = 300;
   const collapsedTextLines = 6;
 
@@ -22,10 +24,19 @@
   const sortButtons = Array.from(
     document.querySelectorAll("[data-sort-field]")
   );
+  const groupTabs = document.getElementById("groupTabs");
+  const parentTabList = document.getElementById("parentTabList");
 
   let selectedRunId = null;
+  let activeGroupId = "";
+  let allGroups = [];
+  let allRuns = [];
+  let visibleRuns = [];
+  let pendingSelectionNotice = "";
   let loadedPosts = [];
   let sortState = { field: null, direction: null };
+
+  tabs.setupParentTabs(parentTabList);
 
   function createElement(tagName, className, text) {
     const element = document.createElement(tagName);
@@ -231,11 +242,22 @@
 
     runs.forEach(function (run) {
       const row = createElement("tr");
-      appendCell(row, String(run.group_name || "—"));
+      const currentGroup = allGroups.find(function (group) {
+        return group.id === String(run.group_id || "");
+      });
+      appendCell(
+        row,
+        String(currentGroup ? currentGroup.name : run.group_name || "—")
+      );
       appendCell(row, networkLabel(run.network));
       appendCell(row, formatDate(run.finished_at || run.started_at));
       appendCell(row, statusLabel(run.status));
       appendCell(row, formatMetric(run.count), "metric-cell");
+      appendCell(row, String(run.warning || "—"), "run-warning-cell");
+
+      if (Number(run.id) === Number(selectedRunId)) {
+        row.classList.add("is-selected");
+      }
 
       const actionCell = appendCell(row, "", "action-cell");
       const selectButton = createElement(
@@ -245,7 +267,7 @@
       );
       selectButton.type = "button";
       selectButton.addEventListener("click", function () {
-        loadPosts(run.id, run.group_name);
+        loadPosts(run, "push");
       });
       actionCell.appendChild(selectButton);
       runsTableBody.appendChild(row);
@@ -295,8 +317,23 @@
     });
   }
 
-  async function loadPosts(runId, groupName) {
+  async function loadPosts(run, historyMode) {
+    const runId = run.id;
+    const currentGroup = allGroups.find(function (group) {
+      return group.id === String(run.group_id || "");
+    });
+    const groupName = currentGroup ? currentGroup.name : run.group_name;
     selectedRunId = runId;
+    renderRuns(visibleRuns);
+    if (historyMode) {
+      tabs.updateUrl(
+        window.location.pathname,
+        activeGroupId,
+        runId,
+        historyMode
+      );
+    }
+    tabs.updateParentLinks(activeGroupId, runId);
     loadedPosts = [];
     sortState = { field: null, direction: null };
     updateSortHeaders();
@@ -328,7 +365,11 @@
 
       const posts = Array.isArray(data.posts) ? data.posts : [];
       renderPosts(posts);
-      setStatus("Публикации загружены.", "success");
+      setStatus(
+        pendingSelectionNotice || "Публикации загружены.",
+        pendingSelectionNotice ? "info" : "success"
+      );
+      pendingSelectionNotice = "";
     } catch (error) {
       renderPosts([]);
       setStatus(
@@ -420,26 +461,98 @@
     }
   }
 
-  async function loadRuns() {
+  function renderGroupTabs() {
+    activeGroupId = tabs.renderGroupTabs(
+      groupTabs,
+      allGroups,
+      activeGroupId,
+      function (groupId) {
+        activateGroup(groupId, "", "push");
+      }
+    );
+    tabs.updateParentLinks(activeGroupId, selectedRunId);
+  }
+
+  function activateGroup(groupId, requestedRunId, historyMode) {
+    activeGroupId = tabs.selectedGroupId(allGroups, groupId);
+    visibleRuns = allRuns.filter(function (run) {
+      return String(run.group_id || "") === activeGroupId;
+    });
+
+    const requestedRun = visibleRuns.find(function (run) {
+      return String(run.id) === String(requestedRunId || "");
+    });
+    const selectedRun = requestedRun || visibleRuns[0] || null;
+    selectedRunId = selectedRun ? selectedRun.id : null;
+    renderGroupTabs();
+    renderRuns(visibleRuns);
+
+    tabs.updateUrl(
+      window.location.pathname,
+      activeGroupId,
+      selectedRun ? selectedRun.id : "",
+      historyMode || "replace"
+    );
+
+    if (selectedRun) {
+      loadPosts(selectedRun, "");
+    } else {
+      loadedPosts = [];
+      postsSection.hidden = true;
+      exportGoogleSheetsButton.hidden = true;
+      setStatus("У выбранной группы пока нет запусков.", "info");
+    }
+  }
+
+  async function fetchJson(url) {
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+    });
+    const data = await readJson(response);
+
+    if (!response.ok || !data || !data.success) {
+      throw new Error(apiError(data, "Не удалось загрузить данные."));
+    }
+
+    return data;
+  }
+
+  async function loadInterface() {
     setStatus("Загружаем запуски…", "info");
 
     try {
-      const response = await fetch(runsApiUrl, {
-        headers: { Accept: "application/json" },
+      const responses = await Promise.all([
+        fetchJson(settingsApiUrl),
+        fetchJson(runsApiUrl),
+      ]);
+      const settingsData = responses[0];
+      const runsData = responses[1];
+      const settingsGroups =
+        settingsData.settings &&
+        Array.isArray(settingsData.settings.groups)
+          ? settingsData.settings.groups
+          : [];
+      allRuns = Array.isArray(runsData.runs) ? runsData.runs : [];
+      allGroups = tabs.mergeGroups(settingsGroups, allRuns);
+
+      const urlState = tabs.readUrlState(window.location.search);
+      const requestedGroupExists = allGroups.some(function (group) {
+        return group.id === urlState.groupId;
       });
-      const data = await readJson(response);
+      pendingSelectionNotice =
+        urlState.groupId && !requestedGroupExists
+          ? "Указанная группа не найдена. Выбрана первая доступная группа."
+          : "";
+      activateGroup(urlState.groupId, urlState.runId, "replace");
 
-      if (!response.ok || !data || !data.success) {
-        throw new Error(apiError(data, "Не удалось загрузить запуски."));
+      if (!allGroups.length) {
+        setStatus("Групп и запусков пока нет.", "info");
       }
-
-      const runs = Array.isArray(data.runs) ? data.runs : [];
-      renderRuns(runs);
-      setStatus(
-        runs.length === 0 ? "Запусков пока нет." : "Запуски загружены.",
-        runs.length === 0 ? "info" : "success"
-      );
     } catch (error) {
+      allGroups = [];
+      allRuns = [];
+      visibleRuns = [];
+      renderGroupTabs();
       renderRuns([]);
       setStatus(
         error instanceof Error
@@ -462,5 +575,9 @@
     });
   });
   updateSortHeaders();
-  loadRuns();
+  window.addEventListener("popstate", function () {
+    const urlState = tabs.readUrlState(window.location.search);
+    activateGroup(urlState.groupId, urlState.runId, "replace");
+  });
+  loadInterface();
 })();

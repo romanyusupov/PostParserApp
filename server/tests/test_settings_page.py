@@ -45,6 +45,22 @@ class SettingsPageTestCase(unittest.TestCase):
         finally:
             response.close()
 
+    def get_stylesheet(self):
+        response = self.client.get("/static/settings.css")
+        try:
+            self.assertEqual(response.status_code, 200)
+            return response.get_data(as_text=True)
+        finally:
+            response.close()
+
+    def get_tabs_script(self):
+        response = self.client.get("/static/app_tabs.js")
+        try:
+            self.assertEqual(response.status_code, 200)
+            return response.get_data(as_text=True)
+        finally:
+            response.close()
+
     def test_settings_page_returns_ok(self):
         response = self.get_page()
 
@@ -58,6 +74,7 @@ class SettingsPageTestCase(unittest.TestCase):
     def test_settings_page_loads_javascript(self):
         page = self.get_page().get_data(as_text=True)
 
+        self.assertIn("/static/app_tabs.js", page)
         self.assertIn("/static/settings.js", page)
 
     def test_settings_page_loads_stylesheet(self):
@@ -102,7 +119,7 @@ class SettingsPageTestCase(unittest.TestCase):
             script,
         )
         self.assertIn('if (showsVideoWords) {', script)
-        self.assertIn('"Ключевые слова видео"', script)
+        self.assertIn('"Поиск в описании видео"', script)
 
     def test_video_words_field_is_hidden_when_switching_to_telegram(self):
         script = self.get_script()
@@ -119,13 +136,82 @@ class SettingsPageTestCase(unittest.TestCase):
         self.assertIn("? []", script)
         self.assertIn("groups: prepareGroupsForSave()", script)
 
-    def test_parse_launch_section_and_button_are_present(self):
+    def test_parse_launch_is_part_of_selected_group_panel(self):
         page = self.get_page().get_data(as_text=True)
         script = self.get_script()
 
-        self.assertIn("Запуск парсинга", page)
-        self.assertIn('id="parseGroupsContainer"', page)
+        self.assertNotIn('id="parseGroupsContainer"', page)
+        self.assertIn('"parse-panel"', script)
+        self.assertIn("Запуск парсинга выбранной группы", script)
         self.assertIn('state.busy ? "Запуск…" : "Запустить"', script)
+
+    def test_parent_and_group_tabs_are_accessible_and_route_aware(self):
+        page = self.get_page().get_data(as_text=True)
+        script = self.get_script()
+        tabs_script = self.get_tabs_script()
+
+        self.assertIn('id="parentTabList"', page)
+        self.assertIn('role="tablist"', page)
+        self.assertIn('id="settingsParentTab"', page)
+        self.assertIn('aria-selected="true"', page)
+        self.assertIn('id="groupTabs"', page)
+        self.assertIn("tabs.renderGroupTabs(", script)
+        self.assertIn("tabs.setupParentTabs(parentTabList);", script)
+        self.assertIn('tab.setAttribute("role", "tab")', tabs_script)
+        self.assertIn('tab.setAttribute("aria-selected"', tabs_script)
+        self.assertIn('tab.setAttribute("aria-controls"', tabs_script)
+        self.assertIn('tab.setAttribute("tabindex"', tabs_script)
+        self.assertIn('["ArrowLeft", "ArrowRight", "Home", "End"]', tabs_script)
+
+    def test_group_tab_values_are_rendered_as_text_not_html(self):
+        tabs_script = self.get_tabs_script()
+
+        self.assertIn("label.textContent =", tabs_script)
+        self.assertIn("tab.title = normalized.name;", tabs_script)
+        self.assertNotIn("innerHTML", tabs_script)
+
+    def test_only_selected_group_form_is_rendered_and_url_is_preserved(self):
+        script = self.get_script()
+
+        self.assertIn("groups.findIndex(function (group)", script)
+        self.assertIn("group.id === activeGroupId", script)
+        self.assertIn("tabs.readUrlState(window.location.search)", script)
+        self.assertIn("tabs.updateUrl(", script)
+        self.assertIn("tabs.updateParentLinks(activeGroupId", script)
+        self.assertIn('window.addEventListener("popstate"', script)
+
+    def test_group_changes_update_tabs_and_preserve_unsaved_data(self):
+        script = self.get_script()
+
+        self.assertIn("activeGroupId = newGroup.id;", script)
+        self.assertIn("const nextGroup = groups[groupIndex + 1]", script)
+        self.assertIn("renderGroupTabs();", script)
+        self.assertIn("hasUnsavedChanges = true;", script)
+        self.assertIn('window.addEventListener("beforeunload"', script)
+
+    def test_advertising_rules_use_one_horizontal_desktop_row(self):
+        stylesheet = self.get_stylesheet()
+        script = self.get_script()
+
+        self.assertIn(".type-columns-header", stylesheet)
+        self.assertIn(".type-row", stylesheet)
+        self.assertIn("minmax(150px, 24fr)", stylesheet)
+        self.assertIn("minmax(220px, 36fr)", stylesheet)
+        self.assertIn("@media (max-width: 980px)", stylesheet)
+        self.assertIn("Название типа рекламы", script)
+        self.assertIn("Поиск в тексте поста", script)
+        self.assertIn("Поиск в описании видео", script)
+        self.assertIn('textarea.rows = 2;', script)
+
+    def test_main_group_fields_are_compact_and_id_is_readonly(self):
+        stylesheet = self.get_stylesheet()
+        script = self.get_script()
+
+        self.assertIn('"fields-grid identity-grid"', script)
+        self.assertIn('"fields-grid schedule-grid"', script)
+        self.assertIn("idInput.readOnly = true;", script)
+        self.assertIn(".identity-grid", stylesheet)
+        self.assertIn(".schedule-grid", stylesheet)
 
     def test_parse_launch_uses_post_api(self):
         script = self.get_script()

@@ -9,4 +9,7 @@ settings_page_blueprint = Blueprint(
 
 @settings_page_blueprint.get("/shadow/settings")
 def settings_page():
-    return render_template("settings.html")
+    return render_template(
+        "settings.html",
+        active_section="settings",
+    )
