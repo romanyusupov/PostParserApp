@@ -128,14 +128,19 @@ class ParseRunnerService:
                     "ParseService не вернул список публикаций."
                 )
 
+            warning = str(parse_result.get("warning") or "").strip()
+
             saved_count = self._results_store.save_posts(run_id, posts)
             count = len(posts)
-            self._results_store.finish_run(run_id, count)
+            if warning:
+                self._results_store.finish_run(run_id, count, warning)
+            else:
+                self._results_store.finish_run(run_id, count)
         except Exception as error:
             self._mark_failed(run_id, saved_count, error)
             raise
 
-        return {
+        result = {
             "run_id": run_id,
             "group_id": normalized_group_id,
             "group_name": group_name,
@@ -143,3 +148,7 @@ class ParseRunnerService:
             "count": count,
             "posts": posts,
         }
+        if warning:
+            result["warning"] = warning
+
+        return result

@@ -67,8 +67,12 @@
   }
 
   function formatMetric(value) {
+    if (value === null || value === undefined || value === "") {
+      return "—";
+    }
+
     const metric = Number(value);
-    return Number.isFinite(metric) ? String(metric) : "0";
+    return Number.isFinite(metric) ? String(metric) : "—";
   }
 
   function statusLabel(status) {

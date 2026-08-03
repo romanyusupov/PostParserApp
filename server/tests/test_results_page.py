@@ -192,6 +192,14 @@ class ResultsPageTestCase(unittest.TestCase):
         self.assertIn("element.textContent = text;", script)
         self.assertIn('const runsApiUrl = "/api/v1/results/runs";', script)
 
+    def test_unavailable_metrics_are_not_rendered_as_zero(self):
+        script_text = self.get_script()
+
+        self.assertIn('value === null', script_text)
+        self.assertIn('value === undefined', script_text)
+        self.assertIn('value === ""', script_text)
+        self.assertNotIn('Number.isFinite(metric) ? String(metric) : "0"', script_text)
+
     def test_google_sheets_export_button_is_in_page(self):
         page = self.client.get("/results").get_data(as_text=True)
 

@@ -1,6 +1,8 @@
 import datetime
 import json
+import logging
 import urllib.parse
+import urllib.error
 import urllib.request
 from typing import Any
 
@@ -21,6 +23,13 @@ MEDIA_FIELDS = ",".join(
     )
 )
 INSIGHT_METRICS = ("views", "reach", "saved", "shares")
+INSIGHTS_PERMISSION = "instagram_business_manage_insights"
+INSIGHTS_UNAVAILABLE_WARNING = (
+    "Instagram Insights unavailable: missing " + INSIGHTS_PERMISSION
+)
+
+
+logger = logging.getLogger(__name__)
 
 
 class InstagramParserError(Exception):
@@ -50,6 +59,16 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError, OverflowError):
         return default
+
+
+def _optional_nonnegative_int(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError, OverflowError):
+        return None
 
 
 def parse_instagram_date(value: Any, field_name: str) -> datetime.date:
@@ -176,7 +195,7 @@ def get_instagram_image_url(
 
 def normalize_instagram_post(
     media_item: dict[str, Any],
-    insights: dict[str, int] | None = None,
+    insights: dict[str, int | None] | None = None,
     carousel_image_url: str = "",
 ) -> dict[str, Any]:
     if not isinstance(media_item, dict):
@@ -194,7 +213,7 @@ def normalize_instagram_post(
         media_item.get("timestamp")
     )
     caption = str(media_item.get("caption") or "")
-    insight_values = insights or {}
+    insight_values = insights if insights is not None else {}
 
     return {
         "source": "instagram",
@@ -208,15 +227,23 @@ def normalize_instagram_post(
             media_item,
             carousel_image_url,
         ),
-        "views": max(0, _safe_int(insight_values.get("views"))),
-        "reach": max(0, _safe_int(insight_values.get("reach"))),
+        "views": _optional_nonnegative_int(
+            insight_values.get("views")
+        ),
+        "reach": _optional_nonnegative_int(
+            insight_values.get("reach")
+        ),
         "likes": max(0, _safe_int(media_item.get("like_count"))),
         "comments": max(
             0,
             _safe_int(media_item.get("comments_count")),
         ),
-        "saved": max(0, _safe_int(insight_values.get("saved"))),
-        "shares": max(0, _safe_int(insight_values.get("shares"))),
+        "saved": _optional_nonnegative_int(
+            insight_values.get("saved")
+        ),
+        "shares": _optional_nonnegative_int(
+            insight_values.get("shares")
+        ),
     }
 
 
@@ -227,8 +254,13 @@ def _default_transport(url: str, timeout: float) -> bytes:
         method="GET",
     )
 
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return response.read()
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.read()
+    except urllib.error.HTTPError as error:
+        if 400 <= error.code < 500:
+            return error.read()
+        raise
 
 
 class InstagramParser:
@@ -262,6 +294,7 @@ class InstagramParser:
         self.api_version = str(api_version or "v22.0").strip("/")
         self.timeout = configured_timeout
         self._transport = transport or _default_transport
+        self.warning = ""
 
         if not callable(self._transport) and not callable(
             getattr(self._transport, "request", None)
@@ -373,7 +406,7 @@ class InstagramParser:
 
         return data
 
-    def fetch_insights(self, media_id: Any) -> dict[str, int]:
+    def fetch_insights(self, media_id: Any) -> dict[str, int | None]:
         normalized_media_id = str(media_id or "").strip()
         if not normalized_media_id:
             raise InstagramParserError(
@@ -386,7 +419,7 @@ class InstagramParser:
             + "/insights",
             {"metric": ",".join(INSIGHT_METRICS)},
         )
-        metrics = {name: 0 for name in INSIGHT_METRICS}
+        metrics = {name: None for name in INSIGHT_METRICS}
         items = data.get("data")
 
         if not isinstance(items, list):
@@ -411,6 +444,27 @@ class InstagramParser:
 
         return metrics
 
+    @staticmethod
+    def _is_missing_insights_permission(
+        error: InstagramApiError,
+    ) -> bool:
+        description = str(error.description or "").casefold()
+        error_code = str(error.error_code or "").strip()
+
+        if INSIGHTS_PERMISSION in description:
+            return True
+
+        permission_marker = any(
+            marker in description
+            for marker in (
+                "permission",
+                "permissions",
+                "not authorized",
+                "does not have",
+            )
+        )
+        return error_code in {"10", "200"} and permission_marker
+
     def _fetch_carousel_image(self, media_id: str) -> str:
         data = self._api_call(
             "/" + urllib.parse.quote(media_id, safe="") + "/children",
@@ -433,6 +487,8 @@ class InstagramParser:
         date_start: Any,
         date_end: Any,
     ) -> list[dict[str, Any]]:
+        self.warning = ""
+        insights_available = True
         normalized_account_id = str(account_id or "").strip()
         if not normalized_account_id:
             raise InstagramParserError(
@@ -501,7 +557,17 @@ class InstagramParser:
                         media_id
                     )
 
-                insights = self.fetch_insights(media_id)
+                insights = None
+                if insights_available:
+                    try:
+                        insights = self.fetch_insights(media_id)
+                    except InstagramApiError as error:
+                        if not self._is_missing_insights_permission(error):
+                            raise
+
+                        insights_available = False
+                        self.warning = INSIGHTS_UNAVAILABLE_WARNING
+                        logger.warning(self.warning)
                 normalized_post = normalize_instagram_post(
                     media_item,
                     insights,

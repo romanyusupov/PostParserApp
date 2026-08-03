@@ -48,9 +48,10 @@ class FakeSettingsStore:
 
 
 class FakeParser:
-    def __init__(self, posts=None, error=None):
+    def __init__(self, posts=None, error=None, warning=""):
         self.posts = list(posts or [])
         self.error = error
+        self.warning = warning
         self.fetch_calls = []
 
     def fetch_posts(self, group_url, date_start, date_end):
@@ -264,6 +265,24 @@ class ParseServiceErrorTestCase(unittest.TestCase):
 
 
 class ParseServiceResultTestCase(unittest.TestCase):
+    def test_safe_parser_warning_is_returned(self):
+        warning = (
+            "Instagram Insights unavailable: missing "
+            "instagram_business_manage_insights"
+        )
+        parser = FakeParser(
+            posts=[{"source": "instagram", "external_id": "media_1"}],
+            warning=warning,
+        )
+        service, _, _ = make_service(
+            make_group(network="instagram"),
+            parser=parser,
+        )
+
+        result = service.parse_group("group_1")
+
+        self.assertEqual(result["warning"], warning)
+
     def test_result_has_unified_format(self):
         posts = [
             {"source": "vk", "external_id": "post_1"},

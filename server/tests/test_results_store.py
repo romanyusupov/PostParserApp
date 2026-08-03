@@ -27,6 +27,7 @@ def make_post(
         "image_url": "",
         "video_url": "",
         "views": 10,
+        "reach": 8,
         "likes": 5,
         "comments": 2,
         "saved": 1,
@@ -92,6 +93,20 @@ class ResultsStoreTestCase(unittest.TestCase):
         self.assertTrue(row[5])
         self.assertIsNotNone(datetime.datetime.fromisoformat(row[5]).tzinfo)
 
+    def test_completed_run_preserves_safe_warning(self):
+        run_id = self.store.create_run("group_1", "Группа", "instagram")
+        warning = (
+            "Instagram Insights unavailable: missing "
+            "instagram_business_manage_insights"
+        )
+
+        result = self.store.finish_run(run_id, 2, warning)
+        run = self.store.get_run(run_id)
+
+        self.assertEqual(result["warning"], warning)
+        self.assertEqual(run["warning"], warning)
+        self.assertEqual(run["status"], "completed")
+
     def test_run_is_failed(self):
         run_id = self.store.create_run("group_1", "Группа", "vk")
 
@@ -121,6 +136,7 @@ class ResultsStoreTestCase(unittest.TestCase):
                 "started_at": run["started_at"],
                 "finished_at": run["finished_at"],
                 "count": 4,
+                "warning": "",
             },
         )
         self.assertIsNone(self.store.get_run(run_id + 1000))
@@ -187,6 +203,12 @@ class ResultsStoreTestCase(unittest.TestCase):
             statuses = connection.execute(
                 "SELECT group_id, status FROM parse_runs ORDER BY id"
             ).fetchall()
+            run_columns = {
+                row[1]
+                for row in connection.execute(
+                    "PRAGMA table_info(parse_runs)"
+                ).fetchall()
+            }
         finally:
             connection.close()
 
@@ -194,6 +216,7 @@ class ResultsStoreTestCase(unittest.TestCase):
             statuses,
             [("running", "running"), ("done", "completed")],
         )
+        self.assertIn("warning", run_columns)
 
     def test_posts_are_saved(self):
         run_id = self.store.create_run("group_1", "Группа", "vk")
@@ -249,10 +272,10 @@ class ResultsStoreTestCase(unittest.TestCase):
         post = make_post(
             "instagram",
             "one",
-            views=None,
+            views="",
             likes="",
             comments="invalid",
-            saved=None,
+            saved="",
             shares=False,
             forwards=None,
         )
@@ -280,6 +303,32 @@ class ResultsStoreTestCase(unittest.TestCase):
                 "shares": 0,
                 "forwards": 0,
             },
+        )
+
+    def test_unavailable_instagram_insights_remain_empty(self):
+        run_id = self.store.create_run(
+            "group_1",
+            "Группа",
+            "instagram",
+        )
+        post = make_post(
+            "instagram",
+            "one",
+            views=None,
+            reach=None,
+            saved=None,
+            shares=None,
+        )
+
+        self.store.save_posts(run_id, [post])
+        saved_post = self.store.get_posts()[0]
+
+        self.assertEqual(
+            {
+                field: saved_post[field]
+                for field in ("views", "reach", "saved", "shares")
+            },
+            {"views": "", "reach": "", "saved": "", "shares": ""},
         )
 
     def test_missing_text_fields_become_empty_strings(self):

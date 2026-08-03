@@ -100,9 +100,9 @@ class RecordingResultsStore:
         self.save_calls.append((run_id, posts))
         return len(posts)
 
-    def finish_run(self, run_id, count):
+    def finish_run(self, run_id, count, warning=""):
         self._event("finish_run")
-        self.finish_calls.append((run_id, count))
+        self.finish_calls.append((run_id, count, warning))
 
     def fail_run(self, run_id, count):
         self._event("fail_run")
@@ -110,7 +110,7 @@ class RecordingResultsStore:
 
 
 class FinishFailingResultsStore(ResultsStore):
-    def finish_run(self, run_id, count):
+    def finish_run(self, run_id, count, warning=""):
         raise RuntimeError("finish failed")
 
 
@@ -160,7 +160,7 @@ class ParseRunnerServiceTestCase(unittest.TestCase):
     def test_run_is_finished_with_post_count(self):
         self.runner.run_group("group_1")
 
-        self.assertEqual(self.results_store.finish_calls, [(42, 2)])
+        self.assertEqual(self.results_store.finish_calls, [(42, 2, "")])
         self.assertEqual(self.results_store.fail_calls, [])
 
     def test_result_has_unified_format(self):
@@ -193,6 +193,54 @@ class ParseRunnerServiceTestCase(unittest.TestCase):
         self.assertIs(context.exception, source_error)
         self.assertEqual(self.results_store.fail_calls, [(42, 0)])
         self.assertEqual(self.results_store.finish_calls, [])
+
+    def test_insights_warning_completes_run_and_preserves_posts(self):
+        warning = (
+            "Instagram Insights unavailable: missing "
+            "instagram_business_manage_insights"
+        )
+        posts = [
+            {
+                "source": "instagram",
+                "external_id": "media_1",
+                "url": "https://instagram.com/p/media_1/",
+                "published_at": "2026-07-15T12:00:00+00:00",
+                "text": "Публикация без Insights",
+                "views": None,
+                "reach": None,
+                "saved": None,
+                "shares": None,
+            }
+        ]
+        parse_service = FakeParseService(
+            result={
+                "group_id": "group_1",
+                "group_name": "Instagram",
+                "network": "instagram",
+                "count": 1,
+                "posts": posts,
+                "warning": warning,
+            }
+        )
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            store = ResultsStore(
+                pathlib.Path(temporary_directory) / "results.sqlite3"
+            )
+            runner = ParseRunnerService(
+                FakeSettingsStore([make_group(network="instagram")]),
+                parse_service,
+                store,
+            )
+
+            result = runner.run_group("group_1")
+            run = store.get_run(result["run_id"])
+            saved_posts = store.get_posts(group_id="group_1")
+
+        self.assertEqual(run["status"], "completed")
+        self.assertEqual(run["warning"], warning)
+        self.assertEqual(len(saved_posts), 1)
+        self.assertEqual(saved_posts[0]["views"], "")
 
     def test_unknown_group_does_not_create_run(self):
         runner = ParseRunnerService(

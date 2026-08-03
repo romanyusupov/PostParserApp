@@ -19,12 +19,14 @@ POST_TEXT_FIELDS = (
 
 POST_METRIC_FIELDS = (
     "views",
+    "reach",
     "likes",
     "comments",
     "saved",
     "shares",
     "forwards",
 )
+OPTIONAL_POST_METRIC_FIELDS = {"views", "reach", "saved", "shares"}
 
 RUNNING_STATUS = "running"
 COMPLETED_STATUS = "completed"
@@ -98,7 +100,13 @@ def _normalize_post(post: Any) -> tuple[Any, ...]:
         for field_name in POST_TEXT_FIELDS
     )
     metric_values = tuple(
-        _safe_metric(post.get(field_name))
+        ""
+        if (
+            field_name in OPTIONAL_POST_METRIC_FIELDS
+            and field_name in post
+            and post[field_name] is None
+        )
+        else _safe_metric(post.get(field_name))
         for field_name in POST_METRIC_FIELDS
     )
     return text_values + metric_values
@@ -135,7 +143,8 @@ class ResultsStore:
                     status TEXT NOT NULL,
                     started_at TEXT NOT NULL,
                     finished_at TEXT NOT NULL,
-                    count INTEGER NOT NULL
+                    count INTEGER NOT NULL,
+                    warning TEXT NOT NULL DEFAULT ''
                 )
                 """
             )
@@ -161,6 +170,13 @@ class ResultsStore:
                     END
                     """
                 )
+            if "warning" not in run_columns:
+                connection.execute(
+                    """
+                    ALTER TABLE parse_runs
+                    ADD COLUMN warning TEXT NOT NULL DEFAULT ''
+                    """
+                )
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS posts (
@@ -175,7 +191,8 @@ class ResultsStore:
                     post_type TEXT NOT NULL,
                     image_url TEXT NOT NULL,
                     video_url TEXT NOT NULL,
-                    views INTEGER NOT NULL,
+                    views INTEGER,
+                    reach INTEGER,
                     likes INTEGER NOT NULL,
                     comments INTEGER NOT NULL,
                     saved INTEGER NOT NULL,
@@ -187,6 +204,16 @@ class ResultsStore:
                 )
                 """
             )
+            post_columns = {
+                row["name"]
+                for row in connection.execute(
+                    "PRAGMA table_info(posts)"
+                ).fetchall()
+            }
+            if "reach" not in post_columns:
+                connection.execute(
+                    "ALTER TABLE posts ADD COLUMN reach INTEGER"
+                )
             connection.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_parse_runs_group_network
@@ -252,6 +279,7 @@ class ResultsStore:
         run_id: Any,
         count: Any,
         status: str,
+        warning: Any = "",
     ) -> dict[str, Any]:
         normalized_run_id = _positive_run_id(run_id)
         normalized_count = _safe_metric(count)
@@ -263,13 +291,14 @@ class ResultsStore:
             cursor = connection.execute(
                 """
                 UPDATE parse_runs
-                SET finished_at = ?, count = ?, status = ?
+                SET finished_at = ?, count = ?, status = ?, warning = ?
                 WHERE id = ?
                 """,
                 (
                     finished_at,
                     normalized_count,
                     status,
+                    _safe_text(warning),
                     normalized_run_id,
                 ),
             )
@@ -291,13 +320,20 @@ class ResultsStore:
             "finished_at": finished_at,
             "count": normalized_count,
             "status": status,
+            "warning": _safe_text(warning),
         }
 
-    def finish_run(self, run_id: Any, count: Any) -> dict[str, Any]:
+    def finish_run(
+        self,
+        run_id: Any,
+        count: Any,
+        warning: Any = "",
+    ) -> dict[str, Any]:
         return self._complete_run(
             run_id,
             count,
             COMPLETED_STATUS,
+            warning,
         )
 
     def fail_run(self, run_id: Any, count: Any) -> dict[str, Any]:
@@ -321,7 +357,8 @@ class ResultsStore:
                     status,
                     started_at,
                     finished_at,
-                    count
+                    count,
+                    warning
                 FROM parse_runs
                 WHERE id = ?
                 """,
@@ -363,7 +400,8 @@ class ResultsStore:
                     status,
                     started_at,
                     finished_at,
-                    count
+                    count,
+                    warning
                 FROM parse_runs
                 ORDER BY id DESC
                 LIMIT ?
@@ -413,13 +451,14 @@ class ResultsStore:
                         image_url,
                         video_url,
                         views,
+                        reach,
                         likes,
                         comments,
                         saved,
                         shares,
                         forwards
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (normalized_run_id,) + values,
                 )
@@ -472,6 +511,7 @@ class ResultsStore:
                 posts.image_url,
                 posts.video_url,
                 posts.views,
+                posts.reach,
                 posts.likes,
                 posts.comments,
                 posts.saved,

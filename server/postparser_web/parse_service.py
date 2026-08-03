@@ -287,10 +287,16 @@ class ParseService:
                 f"Парсер сети «{network}» вернул некорректный результат."
             )
 
-        return {
+        warning = str(getattr(parser, "warning", "") or "").strip()
+
+        result = {
             "group_id": normalized_group_id,
             "group_name": group_name,
             "network": network,
             "count": len(posts),
             "posts": posts,
         }
+        if warning:
+            result["warning"] = warning
+
+        return result

@@ -1,14 +1,18 @@
 import datetime
+import io
 import json
 import unittest
+import urllib.error
 import urllib.parse
 from unittest import mock
 
 from server.postparser_web.instagram_parser import (
+    INSIGHTS_UNAVAILABLE_WARNING,
     InstagramApiError,
     InstagramConfigurationError,
     InstagramParser,
     InstagramParserError,
+    _default_transport,
     normalize_instagram_post,
 )
 
@@ -207,6 +211,30 @@ class InstagramPostNormalizationTestCase(unittest.TestCase):
 
 
 class InstagramInsightsTestCase(unittest.TestCase):
+    def test_http_5xx_is_not_converted_to_api_permission_error(self):
+        http_error = urllib.error.HTTPError(
+            "https://graph.instagram.com/v22.0/me/media",
+            503,
+            "Service Unavailable",
+            {},
+            io.BytesIO(b'{"error":{"code":10,"message":"permission"}}'),
+        )
+
+        try:
+            with (
+                mock.patch(
+                    "urllib.request.urlopen",
+                    side_effect=http_error,
+                ),
+                self.assertRaises(urllib.error.HTTPError),
+            ):
+                _default_transport(
+                    "https://graph.instagram.com/v22.0/me/media",
+                    5,
+                )
+        finally:
+            http_error.close()
+
     def test_insight_metrics_are_read(self):
         transport = FakeTransport().add(
             "/v22.0/media_1/insights",
@@ -235,7 +263,7 @@ class InstagramInsightsTestCase(unittest.TestCase):
             "views,reach,saved,shares",
         )
 
-    def test_missing_insight_metrics_are_zero(self):
+    def test_missing_insight_metrics_remain_unavailable(self):
         transport = FakeTransport().add(
             "/v22.0/media_1/insights",
             insights_response(reach=12),
@@ -247,10 +275,10 @@ class InstagramInsightsTestCase(unittest.TestCase):
         self.assertEqual(
             result,
             {
-                "views": 0,
+                "views": None,
                 "reach": 12,
-                "saved": 0,
-                "shares": 0,
+                "saved": None,
+                "shares": None,
             },
         )
 
@@ -292,6 +320,110 @@ class InstagramInsightsTestCase(unittest.TestCase):
 
 
 class InstagramPaginationTestCase(unittest.TestCase):
+    def test_insights_network_error_is_not_treated_as_missing_permission(self):
+        transport = (
+            FakeTransport()
+            .add(
+                "/v22.0/me/media",
+                {"data": [make_media("media_1")]},
+            )
+            .add(
+                "/v22.0/media_1/insights",
+                RuntimeError("temporary network failure"),
+            )
+        )
+        parser = InstagramParser(TOKEN, transport=transport)
+
+        with self.assertRaises(InstagramParserError):
+            parser.fetch_posts(
+                "account_1",
+                "2026-07-01",
+                "2026-07-31",
+            )
+
+        self.assertEqual(parser.warning, "")
+
+    def test_missing_insights_permission_keeps_posts_and_stops_requests(self):
+        permission_response = {
+            "error": {
+                "message": (
+                    "Application does not have permission for this action; "
+                    f"private response {TOKEN}"
+                ),
+                "code": 10,
+            }
+        }
+        transport = (
+            FakeTransport()
+            .add(
+                "/v22.0/me/media",
+                {
+                    "data": [
+                        make_media("media_1"),
+                        make_media("media_2"),
+                    ]
+                },
+            )
+            .add("/v22.0/media_1/insights", permission_response)
+        )
+        parser = InstagramParser(TOKEN, transport=transport)
+
+        with self.assertLogs(
+            "server.postparser_web.instagram_parser",
+            level="WARNING",
+        ) as captured_logs:
+            result = parser.fetch_posts(
+                "account_1",
+                "2026-07-01",
+                "2026-07-31",
+            )
+
+        insight_calls = [
+            call
+            for call in transport.calls
+            if call["path"].endswith("/insights")
+        ]
+        self.assertEqual(len(result), 2)
+        self.assertEqual(len(insight_calls), 1)
+        self.assertEqual(parser.warning, INSIGHTS_UNAVAILABLE_WARNING)
+        for post in result:
+            self.assertEqual(
+                {
+                    metric: post[metric]
+                    for metric in ("views", "reach", "saved", "shares")
+                },
+                {
+                    "views": None,
+                    "reach": None,
+                    "saved": None,
+                    "shares": None,
+                },
+            )
+
+        log_text = "\n".join(captured_logs.output)
+        self.assertIn(INSIGHTS_UNAVAILABLE_WARNING, log_text)
+        self.assertNotIn(TOKEN, log_text)
+        self.assertNotIn("private response", log_text)
+
+    def test_base_media_permission_error_is_not_ignored(self):
+        transport = FakeTransport().add(
+            "/v22.0/me/media",
+            {
+                "error": {
+                    "message": "Application does not have permission",
+                    "code": 10,
+                }
+            },
+        )
+        parser = InstagramParser(TOKEN, transport=transport)
+
+        with self.assertRaises(InstagramApiError):
+            parser.fetch_posts(
+                "account_1",
+                "2026-07-01",
+                "2026-07-31",
+            )
+
     def test_fetch_posts_adds_carousel_image_and_insights(self):
         media_item = make_media(
             "media_1",

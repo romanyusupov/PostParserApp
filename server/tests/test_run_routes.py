@@ -67,6 +67,22 @@ class RunRoutesTestCase(unittest.TestCase):
 
         self.assertEqual(response.get_json()["run"]["count"], 12)
 
+    def test_run_response_contains_safe_warning(self):
+        warning = (
+            "Instagram Insights unavailable: missing "
+            "instagram_business_manage_insights"
+        )
+        run_id = self.results_store.create_run(
+            "group_1",
+            "Instagram",
+            "instagram",
+        )
+        self.results_store.finish_run(run_id, 2, warning)
+
+        response = self.client.get(f"/api/v1/runs/{run_id}")
+
+        self.assertEqual(response.get_json()["run"]["warning"], warning)
+
     def test_missing_run_returns_not_found(self):
         response = self.client.get("/api/v1/runs/999999")
 
