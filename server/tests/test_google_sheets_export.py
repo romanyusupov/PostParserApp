@@ -11,6 +11,7 @@ from server.postparser_web.google_sheets_export import (
     GoogleSheetsConfigurationError,
     GoogleSheetsExporter,
     GoogleSheetsExportError,
+    build_export_row,
 )
 from server.postparser_web.results_store import ResultsStore
 
@@ -236,22 +237,16 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
         )
 
     def test_missing_values_export_as_empty_cells(self):
-        run_id = self.create_run(
-            posts=[
-                make_post(
-                    image_url=None,
-                    views=None,
-                    likes="",
-                    comments="invalid",
-                    video_description=None,
-                    advertising_type=None,
-                )
-            ]
+        row = build_export_row(
+            make_post(
+                image_url=None,
+                views=None,
+                likes="",
+                comments="invalid",
+                video_description=None,
+                advertising_type=None,
+            )
         )
-
-        self.create_exporter().export_run(run_id)
-
-        row = self.client.written_values[0][2][5]
         self.assertEqual(row[3], "")
         self.assertEqual(row[4:7], ["", "", ""])
         self.assertEqual(row[8:], ["", ""])
