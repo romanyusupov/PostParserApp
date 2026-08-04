@@ -42,8 +42,17 @@ def make_post(post_id, timestamp=None, **values):
     return post
 
 
-def wall_response(items):
-    return {"response": {"count": len(items), "items": items}}
+def wall_response(items, response_count=None):
+    return {
+        "response": {
+            "count": (
+                len(items)
+                if response_count is None
+                else response_count
+            ),
+            "items": items,
+        }
+    }
 
 
 class FakeTransport:
@@ -225,8 +234,8 @@ class VkPaginationTestCase(unittest.TestCase):
         first_page = [make_post(post_id) for post_id in range(1, 101)]
         second_page = [make_post(101)]
         transport = FakeTransport(
-            wall_response(first_page),
-            wall_response(second_page),
+            wall_response(first_page, response_count=101),
+            wall_response(second_page, response_count=101),
         )
         parser = VkParser(TOKEN, transport=transport)
 
@@ -241,8 +250,8 @@ class VkPaginationTestCase(unittest.TestCase):
     def test_offset_is_incremented_only_once_per_page(self):
         first_page = [make_post(post_id) for post_id in range(1, 101)]
         transport = FakeTransport(
-            wall_response(first_page),
-            wall_response([]),
+            wall_response(first_page, response_count=200),
+            wall_response([], response_count=200),
         )
         parser = VkParser(TOKEN, transport=transport)
 
@@ -254,6 +263,25 @@ class VkPaginationTestCase(unittest.TestCase):
             if call["method"] == "wall.get"
         ]
         self.assertEqual(wall_offsets, ["0", "100"])
+
+    def test_short_intermediate_page_does_not_stop_pagination(self):
+        first_page = [make_post(post_id) for post_id in range(1, 100)]
+        second_page = [make_post(post_id) for post_id in range(100, 200)]
+        third_page = [make_post(post_id) for post_id in range(200, 250)]
+        transport = FakeTransport(
+            wall_response(first_page, response_count=250),
+            wall_response(second_page, response_count=250),
+            wall_response(third_page, response_count=250),
+        )
+        parser = VkParser(TOKEN, transport=transport)
+
+        result = parser.fetch_posts("-123456", "2026-07-01", "2026-07-31")
+
+        self.assertEqual(len(result), 249)
+        self.assertEqual(
+            [call["parameters"]["offset"] for call in transport.calls],
+            ["0", "100", "200"],
+        )
 
     def test_pagination_log_contains_only_safe_page_metadata(self):
         page = [
@@ -301,8 +329,8 @@ class VkPaginationTestCase(unittest.TestCase):
         ]
         second_page = [pinned, make_post(100)]
         transport = FakeTransport(
-            wall_response(first_page),
-            wall_response(second_page),
+            wall_response(first_page, response_count=101),
+            wall_response(second_page, response_count=101),
         )
         parser = VkParser(TOKEN, transport=transport)
 

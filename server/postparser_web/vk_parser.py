@@ -528,19 +528,19 @@ class VkParser:
                 )
 
             page_items = response["items"]
+            response_count = _safe_int(response.get("count"), -1)
             LOGGER.info(
                 "VK pagination: offset=%d items=%d response_count=%d "
                 "oldest_date=%s",
                 offset,
                 len(page_items),
-                _safe_int(response.get("count"), -1),
+                response_count,
                 _oldest_page_date(page_items),
             )
             if not page_items:
                 break
 
             regular_timestamps = []
-            new_posts_on_page = 0
 
             for post in page_items:
                 if not isinstance(post, dict):
@@ -559,7 +559,6 @@ class VkParser:
                     continue
 
                 seen_posts.add(identity)
-                new_posts_on_page += 1
 
                 if timestamp < start_timestamp or timestamp > end_timestamp:
                     continue
@@ -571,7 +570,7 @@ class VkParser:
                     )
                 )
 
-            offset += len(page_items)
+            offset += WALL_PAGE_SIZE
 
             reached_start_boundary = any(
                 timestamp < start_timestamp
@@ -581,10 +580,7 @@ class VkParser:
             if reached_start_boundary:
                 break
 
-            if len(page_items) < WALL_PAGE_SIZE:
-                break
-
-            if new_posts_on_page == 0:
+            if response_count >= 0 and offset >= response_count:
                 break
 
         result.sort(key=lambda item: item[0], reverse=True)
