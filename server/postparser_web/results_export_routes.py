@@ -40,7 +40,7 @@ def _export_url(result):
 
     spreadsheet_id = (
         current_app.config.get("GOOGLE_SHEETS_SPREADSHEET_ID")
-        or os.environ.get("POSTPARSER_GOOGLE_SPREADSHEET_ID", "")
+        or os.environ.get("GOOGLE_SPREADSHEET_ID", "")
     )
     spreadsheet_id = str(spreadsheet_id).strip()
     if not spreadsheet_id:

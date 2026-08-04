@@ -1,5 +1,7 @@
+import datetime
 import os
 import pathlib
+import stat
 import tempfile
 import unittest
 from unittest import mock
@@ -14,24 +16,55 @@ from server.postparser_web.results_store import ResultsStore
 
 
 SPREADSHEET_ID = "spreadsheet-id-for-tests"
-CREDENTIALS_JSON = '{"private_key":"fake-private-key"}'
+GROUP_NAME = "ВК Олег Торсунов"
+EXPORTED_AT = datetime.datetime(
+    2026,
+    8,
+    4,
+    10,
+    30,
+    tzinfo=datetime.timezone.utc,
+)
 
 
 class MockClient:
-    def __init__(self, error=None):
+    def __init__(self, existing_sheets=None, error=None):
         self.error = error
+        self.existing_sheets = set(existing_sheets or [])
         self.created_sheets = []
+        self.cleared_sheets = []
         self.written_values = []
+        self.sheet_values = {}
+        self.operations = []
 
-    def create_sheet(self, spreadsheet_id, sheet_name):
+    def _raise_if_needed(self):
         if self.error is not None:
             raise self.error
+
+    def ensure_sheet(self, spreadsheet_id, sheet_name):
+        self._raise_if_needed()
+        self.operations.append(("ensure", spreadsheet_id, sheet_name))
+        if sheet_name in self.existing_sheets:
+            return False
+
+        self.existing_sheets.add(sheet_name)
         self.created_sheets.append((spreadsheet_id, sheet_name))
+        return True
+
+    def clear_sheet(self, spreadsheet_id, sheet_name):
+        self._raise_if_needed()
+        self.operations.append(("clear", spreadsheet_id, sheet_name))
+        self.cleared_sheets.append((spreadsheet_id, sheet_name))
+        self.sheet_values[sheet_name] = []
 
     def write_values(self, spreadsheet_id, sheet_name, rows):
-        if self.error is not None:
-            raise self.error
-        self.written_values.append((spreadsheet_id, sheet_name, rows))
+        self._raise_if_needed()
+        copied_rows = [list(row) for row in rows]
+        self.operations.append(("write", spreadsheet_id, sheet_name))
+        self.written_values.append(
+            (spreadsheet_id, sheet_name, copied_rows)
+        )
+        self.sheet_values[sheet_name] = copied_rows
 
 
 def make_post(external_id="post_1", **values):
@@ -43,14 +76,12 @@ def make_post(external_id="post_1", **values):
         "text": "Полный текст публикации",
         "first_paragraph": "Первый абзац",
         "post_type": "Фото",
-        "video_description": "Отдельное описание видео",
+        "video_description": "Описание видео",
         "advertising_type": "Партнёрская публикация",
+        "image_url": "https://example.test/image.jpg",
         "views": 10,
         "likes": 5,
         "comments": 2,
-        "saved": 1,
-        "shares": 3,
-        "forwards": 0,
     }
     post.update(values)
     return post
@@ -59,15 +90,20 @@ def make_post(external_id="post_1", **values):
 class GoogleSheetsExporterTestCase(unittest.TestCase):
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary_directory.cleanup)
+        self.temporary_path = pathlib.Path(self.temporary_directory.name)
         self.results_store = ResultsStore(
-            pathlib.Path(self.temporary_directory.name) / "results.sqlite3"
+            self.temporary_path / "results.sqlite3"
         )
+        self.credentials_path = self.temporary_path / "service-account.json"
+        self.credentials_path.write_text(
+            '{"private_key":"fake-private-key"}',
+            encoding="utf-8",
+        )
+        os.chmod(self.credentials_path, 0o600)
         self.client = MockClient()
 
-    def tearDown(self):
-        self.temporary_directory.cleanup()
-
-    def create_run(self, group_name="ОГТ", posts=None):
+    def create_run(self, group_name=GROUP_NAME, posts=None):
         run_id = self.results_store.create_run(
             "group_1",
             group_name,
@@ -82,14 +118,17 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
         return GoogleSheetsExporter(
             client_factory=lambda: export_client,
             spreadsheet_id=SPREADSHEET_ID,
-            credentials_json=CREDENTIALS_JSON,
+            credentials_path=self.credentials_path,
             results_store=self.results_store,
+            now_factory=lambda: EXPORTED_AT,
         )
 
     def test_missing_spreadsheet_id_is_rejected(self):
         with mock.patch.dict(os.environ, {}, clear=True):
             with self.assertRaises(GoogleSheetsConfigurationError):
-                GoogleSheetsExporter(credentials_json=CREDENTIALS_JSON)
+                GoogleSheetsExporter(
+                    credentials_path=self.credentials_path,
+                )
 
     def test_missing_credentials_are_rejected(self):
         with mock.patch.dict(os.environ, {}, clear=True):
@@ -98,8 +137,8 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
 
     def test_configuration_is_loaded_from_environment(self):
         environment = {
-            "POSTPARSER_GOOGLE_SPREADSHEET_ID": SPREADSHEET_ID,
-            "POSTPARSER_GOOGLE_SERVICE_ACCOUNT_JSON": CREDENTIALS_JSON,
+            "GOOGLE_SPREADSHEET_ID": SPREADSHEET_ID,
+            "GOOGLE_SHEETS_CREDENTIALS_PATH": str(self.credentials_path),
         }
         run_id = self.create_run()
 
@@ -107,123 +146,130 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
             exporter = GoogleSheetsExporter(
                 client_factory=lambda: self.client,
                 results_store=self.results_store,
+                now_factory=lambda: EXPORTED_AT,
             )
             exporter.export_run(run_id)
 
-        self.assertEqual(self.client.created_sheets[0][0], SPREADSHEET_ID)
+        self.assertEqual(self.client.operations[0][1], SPREADSHEET_ID)
 
-    def test_export_creates_sheet(self):
+    @unittest.skipIf(os.name == "nt", "POSIX permissions are checked on VPS")
+    def test_credentials_file_must_have_mode_0600(self):
+        os.chmod(self.credentials_path, 0o644)
+
+        with self.assertRaises(GoogleSheetsConfigurationError):
+            self.create_exporter()
+
+    def test_new_sheet_is_created_with_exact_group_name(self):
         run_id = self.create_run()
 
         result = self.create_exporter().export_run(run_id)
 
-        self.assertEqual(len(self.client.created_sheets), 1)
-        self.assertEqual(self.client.created_sheets[0][1], result["sheet_name"])
-        self.assertIn("VK ОГТ", result["sheet_name"])
+        self.assertEqual(result["sheet_name"], GROUP_NAME)
+        self.assertEqual(
+            self.client.created_sheets,
+            [(SPREADSHEET_ID, GROUP_NAME)],
+        )
+        self.assertEqual(self.client.cleared_sheets, [])
 
-    def test_headers_are_written_in_required_order(self):
+    def test_existing_sheet_is_cleared_before_write(self):
+        client = MockClient(existing_sheets={GROUP_NAME})
+        run_id = self.create_run(posts=[make_post()])
+
+        self.create_exporter(client).export_run(run_id)
+
+        self.assertEqual(
+            [operation[0] for operation in client.operations],
+            ["ensure", "clear", "write"],
+        )
+        self.assertEqual(
+            client.cleared_sheets,
+            [(SPREADSHEET_ID, GROUP_NAME)],
+        )
+
+    def test_information_rows_and_headers_are_written(self):
         run_id = self.create_run()
 
         self.create_exporter().export_run(run_id)
 
         rows = self.client.written_values[0][2]
-        self.assertEqual(rows[0], list(EXPORT_HEADERS))
+        self.assertEqual(rows[0], ["Группа", GROUP_NAME])
+        self.assertEqual(rows[1], ["Дата экспорта", EXPORTED_AT.isoformat()])
+        self.assertEqual(rows[2], ["Run", run_id])
+        self.assertEqual(rows[3], [])
+        self.assertEqual(rows[4], list(EXPORT_HEADERS))
         self.assertEqual(
-            rows[0],
+            rows[4],
             [
-                "Дата",
-                "Сеть",
-                "Группа",
-                "Тип",
-                "Описание видео",
-                "Тип рекламы",
-                "Текст",
-                "Первый абзац",
                 "Ссылка",
+                "Дата",
+                "Первый абзац",
+                "Картинка",
                 "Просмотры",
                 "Лайки",
                 "Комментарии",
-                "Сохранения",
-                "Репосты",
+                "Тип поста",
+                "Описание видео",
+                "Тип рекламы",
             ],
         )
 
-    def test_post_values_are_written(self):
+    def test_post_values_are_written_in_results_table_order(self):
         run_id = self.create_run(posts=[make_post()])
 
         self.create_exporter().export_run(run_id)
 
-        row = self.client.written_values[0][2][1]
+        row = self.client.written_values[0][2][5]
         self.assertEqual(
             row,
             [
-                "2026-08-01T12:00:00+00:00",
-                "vk",
-                "ОГТ",
-                "Фото",
-                "Отдельное описание видео",
-                "Партнёрская публикация",
-                "Полный текст публикации",
-                "Первый абзац",
                 "https://example.test/post",
+                "2026-08-01T12:00:00+00:00",
+                "Первый абзац",
+                "https://example.test/image.jpg",
                 10,
                 5,
                 2,
-                1,
-                3,
+                "Фото",
+                "Описание видео",
+                "Партнёрская публикация",
             ],
         )
 
-    def test_missing_metrics_become_zero_and_forwards_are_supported(self):
+    def test_missing_values_export_as_empty_cells(self):
         run_id = self.create_run(
             posts=[
                 make_post(
+                    image_url=None,
                     views=None,
                     likes="",
                     comments="invalid",
-                    saved=None,
-                    shares=None,
-                    forwards=7,
+                    video_description=None,
+                    advertising_type=None,
                 )
             ]
         )
 
         self.create_exporter().export_run(run_id)
 
-        row = self.client.written_values[0][2][1]
-        self.assertEqual(row[9:], [0, 0, 0, 0, 7])
+        row = self.client.written_values[0][2][5]
+        self.assertEqual(row[3], "")
+        self.assertEqual(row[4:7], ["", "", ""])
+        self.assertEqual(row[8:], ["", ""])
 
-    def test_old_post_without_advertising_type_exports_empty_cell(self):
-        run_id = self.create_run(
-            posts=[make_post(advertising_type=None)]
+    def test_repeated_export_replaces_data_without_duplicates(self):
+        run_id = self.create_run(posts=[make_post()])
+        exporter = self.create_exporter()
+
+        exporter.export_run(run_id)
+        exporter.export_run(run_id)
+
+        self.assertEqual(len(self.client.created_sheets), 1)
+        self.assertEqual(len(self.client.cleared_sheets), 1)
+        self.assertEqual(len(self.client.sheet_values[GROUP_NAME]), 6)
+        self.assertEqual(
+            self.client.sheet_values[GROUP_NAME][5][0],
+            "https://example.test/post",
         )
-
-        self.create_exporter().export_run(run_id)
-
-        row = self.client.written_values[0][2][1]
-        self.assertEqual(row[5], "")
-
-    def test_old_post_without_video_description_exports_empty_cell(self):
-        run_id = self.create_run(
-            posts=[make_post(video_description=None)]
-        )
-
-        self.create_exporter().export_run(run_id)
-
-        row = self.client.written_values[0][2][1]
-        self.assertEqual(row[4], "")
-
-    def test_cyrillic_is_preserved(self):
-        run_id = self.create_run(
-            group_name="Русская группа",
-            posts=[make_post(text="Кириллица без потерь")],
-        )
-
-        self.create_exporter().export_run(run_id)
-
-        row = self.client.written_values[0][2][1]
-        self.assertEqual(row[2], "Русская группа")
-        self.assertEqual(row[6], "Кириллица без потерь")
 
     def test_long_sheet_name_is_truncated(self):
         run_id = self.create_run(group_name="Я" * 150)
@@ -231,7 +277,6 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
         result = self.create_exporter().export_run(run_id)
 
         self.assertEqual(len(result["sheet_name"]), 100)
-        self.assertEqual(len(self.client.created_sheets[0][1]), 100)
 
     def test_client_error_becomes_safe_export_error(self):
         client = MockClient(error=RuntimeError("Google client failed"))
@@ -248,7 +293,7 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
         secret = "very-secret-private-key"
         spreadsheet_id = "complete-private-spreadsheet-id"
         client = MockClient(
-            error=GoogleSheetsExportError(
+            error=RuntimeError(
                 f"token={secret}; spreadsheet={spreadsheet_id}"
             )
         )
@@ -256,7 +301,7 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
         exporter = GoogleSheetsExporter(
             client_factory=lambda: client,
             spreadsheet_id=spreadsheet_id,
-            credentials_json=f'{{"private_key":"{secret}"}}',
+            credentials_path=self.credentials_path,
             results_store=self.results_store,
         )
 
@@ -283,7 +328,7 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
         exporter = GoogleSheetsExporter(
             client_factory=client_factory,
             spreadsheet_id=SPREADSHEET_ID,
-            credentials_json=CREDENTIALS_JSON,
+            credentials_path=self.credentials_path,
             results_store=self.results_store,
         )
 

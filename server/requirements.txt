@@ -6,6 +6,8 @@ Werkzeug==3.1.8
 blinker==1.9.0
 click==8.4.2
 gunicorn==26.0.0
+google-api-python-client==2.198.0
+google-auth==2.56.0
 itsdangerous==2.2.0
 packaging==26.2
 pyaes==1.6.1

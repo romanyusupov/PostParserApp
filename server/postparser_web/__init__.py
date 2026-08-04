@@ -61,8 +61,8 @@ def create_app(test_config=None):
                 spreadsheet_id=app.config.get(
                     "GOOGLE_SHEETS_SPREADSHEET_ID"
                 ),
-                credentials_json=app.config.get(
-                    "GOOGLE_SHEETS_CREDENTIALS_JSON"
+                credentials_path=app.config.get(
+                    "GOOGLE_SHEETS_CREDENTIALS_PATH"
                 ),
                 results_store=results_store,
             )
