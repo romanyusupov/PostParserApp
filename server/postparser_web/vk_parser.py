@@ -1,5 +1,6 @@
 import datetime
 import json
+import logging
 import urllib.parse
 import urllib.request
 from typing import Any
@@ -21,6 +22,7 @@ PHOTO_TYPE_ORDER = {
     "z": 9,
     "w": 10,
 }
+LOGGER = logging.getLogger(__name__)
 
 
 class VkParserError(Exception):
@@ -50,6 +52,24 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError, OverflowError):
         return default
+
+
+def _oldest_page_date(page_items: list[Any]) -> str:
+    timestamps = [
+        _safe_int(item.get("date"))
+        for item in page_items
+        if isinstance(item, dict) and _safe_int(item.get("date")) > 0
+    ]
+    if not timestamps:
+        return "none"
+
+    try:
+        return datetime.datetime.fromtimestamp(
+            min(timestamps),
+            tz=datetime.timezone.utc,
+        ).date().isoformat()
+    except (OverflowError, OSError, ValueError):
+        return "invalid"
 
 
 def parse_vk_date(value: Any, field_name: str) -> datetime.date:
@@ -508,6 +528,14 @@ class VkParser:
                 )
 
             page_items = response["items"]
+            LOGGER.info(
+                "VK pagination: offset=%d items=%d response_count=%d "
+                "oldest_date=%s",
+                offset,
+                len(page_items),
+                _safe_int(response.get("count"), -1),
+                _oldest_page_date(page_items),
+            )
             if not page_items:
                 break
 

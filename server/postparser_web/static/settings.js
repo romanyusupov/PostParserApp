@@ -6,6 +6,7 @@
   const runsApiUrl = "/api/v1/runs/";
   const pollIntervalMilliseconds = 2000;
   const tabs = window.PostParserTabs;
+  const settingsLogic = window.PostParserSettingsLogic;
 
   const revisionValue = document.getElementById("revisionValue");
   const addGroupButton = document.getElementById("addGroupButton");
@@ -587,6 +588,17 @@
     renderGroups();
 
     try {
+      const settingsAreSaved =
+        await settingsLogic.ensureSettingsSavedBeforeLaunch(
+          hasUnsavedChanges,
+          saveSettings
+        );
+      if (!settingsAreSaved) {
+        state.busy = false;
+        renderGroups();
+        return;
+      }
+
       const response = await fetch(parseApiUrl, {
         method: "POST",
         headers: {
@@ -705,7 +717,7 @@
 
   async function saveSettings() {
     if (requestInProgress) {
-      return;
+      return false;
     }
 
     setBusy(true);
@@ -738,7 +750,7 @@
           "Настройки были изменены в другом окне. Перезагрузите данные.",
           "error"
         );
-        return;
+        return false;
       }
 
       if (response.status === 400) {
@@ -748,7 +760,7 @@
             : "Проверьте заполнение настроек.",
           "error"
         );
-        return;
+        return false;
       }
 
       if (!response.ok || !data) {
@@ -762,11 +774,13 @@
       revisionValue.textContent = String(revision);
       renderGroups();
       setStatus("Настройки успешно сохранены.", "success");
+      return true;
     } catch (error) {
       setStatus(
         "Не удалось сохранить настройки. Попробуйте ещё раз.",
         "error"
       );
+      return false;
     } finally {
       setBusy(false);
     }

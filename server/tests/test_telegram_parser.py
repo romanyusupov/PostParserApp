@@ -51,6 +51,8 @@ class FakeClient:
         self.connected = False
         self.disconnected = False
         self.entity_requests = []
+        self.iter_message_calls = []
+        self.yielded_message_count = 0
         self.media_requests = []
 
     async def connect(self):
@@ -65,8 +67,10 @@ class FakeClient:
         self.entity_requests.append(channel)
         return SimpleNamespace(username=channel)
 
-    async def iter_messages(self, entity):
+    async def iter_messages(self, entity, **parameters):
+        self.iter_message_calls.append((entity, parameters))
         for message in self.messages:
+            self.yielded_message_count += 1
             yield message
 
     async def get_media_url(self, message, media_type):
@@ -364,12 +368,13 @@ class TelegramFetchPostsTestCase(unittest.TestCase):
         self.assertEqual(client.entity_requests, ["channel_name"])
 
     def test_dates_are_filtered_inclusively(self):
-        parser, _, _ = make_parser(
+        parser, client, _ = make_parser(
             (
-                make_message(1, "2026-06-30T23:59:59+00:00"),
-                make_message(2, "2026-07-01T00:00:00+00:00"),
-                make_message(3, "2026-07-31T23:59:59+00:00"),
                 make_message(4, "2026-08-01T00:00:00+00:00"),
+                make_message(3, "2026-07-31T23:59:59+00:00"),
+                make_message(2, "2026-07-01T00:00:00+00:00"),
+                make_message(1, "2026-06-30T23:59:59+00:00"),
+                make_message(0, "2026-06-29T23:59:59+00:00"),
             )
         )
 
@@ -382,6 +387,30 @@ class TelegramFetchPostsTestCase(unittest.TestCase):
         self.assertEqual(
             [post["external_id"] for post in result],
             ["3", "2"],
+        )
+        self.assertEqual(client.yielded_message_count, 4)
+
+    def test_history_uses_end_offset_and_has_no_artificial_limit(self):
+        parser, client, _ = make_parser()
+
+        parser.fetch_posts(
+            "channel_name",
+            "2026-07-01",
+            "2026-07-31",
+        )
+
+        self.assertEqual(len(client.iter_message_calls), 1)
+        entity, parameters = client.iter_message_calls[0]
+        self.assertEqual(entity.username, "channel_name")
+        self.assertIsNone(parameters["limit"])
+        self.assertEqual(
+            parameters["offset_date"],
+            datetime.datetime(
+                2026,
+                8,
+                1,
+                tzinfo=datetime.timezone.utc,
+            ),
         )
 
     def test_reverse_date_range_is_rejected(self):

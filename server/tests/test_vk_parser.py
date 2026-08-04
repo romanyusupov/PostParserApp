@@ -255,6 +255,29 @@ class VkPaginationTestCase(unittest.TestCase):
         ]
         self.assertEqual(wall_offsets, ["0", "100"])
 
+    def test_pagination_log_contains_only_safe_page_metadata(self):
+        page = [
+            make_post(1, utc_timestamp(2026, 7, 20, 12)),
+            make_post(2, utc_timestamp(2026, 7, 10, 12)),
+        ]
+        parser = VkParser(
+            TOKEN,
+            transport=FakeTransport(wall_response(page)),
+        )
+
+        with self.assertLogs(
+            "server.postparser_web.vk_parser",
+            level="INFO",
+        ) as captured:
+            parser.fetch_posts("-123456", "2026-07-01", "2026-07-31")
+
+        log_text = "\n".join(captured.output)
+        self.assertIn("offset=0", log_text)
+        self.assertIn("items=2", log_text)
+        self.assertIn("response_count=2", log_text)
+        self.assertIn("oldest_date=2026-07-10", log_text)
+        self.assertNotIn(TOKEN, log_text)
+
     def test_loading_stops_after_posts_older_than_start_date(self):
         old_page = [
             make_post(post_id, utc_timestamp(2026, 6, 30, 12))

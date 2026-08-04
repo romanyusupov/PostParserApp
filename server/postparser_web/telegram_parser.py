@@ -318,8 +318,17 @@ class TelegramParser:
             ).strip().lstrip("@")
             result = []
             seen_message_ids = set()
+            end_offset_date = datetime.datetime.combine(
+                end_date + datetime.timedelta(days=1),
+                datetime.time.min,
+                tzinfo=datetime.timezone.utc,
+            )
 
-            async for message in client.iter_messages(entity):
+            async for message in client.iter_messages(
+                entity,
+                limit=None,
+                offset_date=end_offset_date,
+            ):
                 message_id = _safe_int(getattr(message, "id", None))
                 if message_id <= 0 or message_id in seen_message_ids:
                     continue
@@ -327,7 +336,10 @@ class TelegramParser:
                 published_at = _message_datetime(message)
                 published_date = published_at.date()
 
-                if published_date < start_date or published_date > end_date:
+                if published_date < start_date:
+                    break
+
+                if published_date > end_date:
                     continue
 
                 seen_message_ids.add(message_id)

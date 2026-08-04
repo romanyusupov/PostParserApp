@@ -87,6 +87,7 @@ class SettingsPageTestCase(unittest.TestCase):
         page = self.get_page().get_data(as_text=True)
 
         self.assertIn("/static/app_tabs.js", page)
+        self.assertIn("/static/settings_logic.js", page)
         self.assertIn("/static/settings.js", page)
 
     def test_settings_page_loads_stylesheet(self):
@@ -229,6 +230,12 @@ class SettingsPageTestCase(unittest.TestCase):
         script = self.get_script()
 
         self.assertIn('const parseApiUrl = "/api/v1/parse";', script)
+        self.assertIn(
+            "settingsLogic.ensureSettingsSavedBeforeLaunch(",
+            script,
+        )
+        self.assertIn("hasUnsavedChanges,", script)
+        self.assertIn("saveSettings", script)
         self.assertIn('method: "POST"', script)
         self.assertIn("body: JSON.stringify({ groupId: groupId })", script)
 
