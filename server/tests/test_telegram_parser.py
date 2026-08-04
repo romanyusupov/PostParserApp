@@ -1,5 +1,7 @@
 import datetime
+import pathlib
 import sys
+import tempfile
 import unittest
 from types import ModuleType, SimpleNamespace
 from unittest import mock
@@ -54,6 +56,7 @@ class FakeClient:
         self.iter_message_calls = []
         self.yielded_message_count = 0
         self.media_requests = []
+        self.download_requests = []
 
     async def connect(self):
         self.connected = True
@@ -76,6 +79,10 @@ class FakeClient:
     async def get_media_url(self, message, media_type):
         self.media_requests.append((message.id, media_type))
         return f"https://media.test/{message.id}/{media_type}"
+
+    async def download_media(self, message, **parameters):
+        self.download_requests.append((message.id, parameters))
+        return b"telegram-photo"
 
     async def disconnect(self):
         self.disconnected = True
@@ -485,6 +492,70 @@ class TelegramFetchPostsTestCase(unittest.TestCase):
             "https://media.test/2/video",
         )
         self.assertEqual(client.media_requests, [(1, "photo"), (2, "video")])
+        self.assertEqual(client.download_requests, [])
+
+    def test_default_client_photo_is_stored_and_gets_public_url(self):
+        client = FakeClient((make_message(7, photo=object()),))
+        client.get_media_url = None
+        factory = FakeClientFactory(client)
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            parser = TelegramParser(
+                12345,
+                API_HASH,
+                SESSION_STRING,
+                client_factory=factory,
+                media_directory=temporary_directory,
+                public_base_url="https://parser.example.test/",
+            )
+            posts = parser.fetch_posts(
+                "channel_name",
+                "2026-07-01",
+                "2026-07-31",
+            )
+            stored_files = list(pathlib.Path(temporary_directory).glob("*.jpg"))
+
+            self.assertEqual(len(stored_files), 1)
+            self.assertEqual(stored_files[0].read_bytes(), b"telegram-photo")
+            self.assertRegex(
+                posts[0]["image_url"],
+                r"^https://parser\.example\.test/media/telegram/[0-9a-f]{64}\.jpg$",
+            )
+            self.assertEqual(
+                client.download_requests,
+                [(7, {"file": bytes, "thumb": -1})],
+            )
+
+    def test_photo_download_failure_does_not_fail_post(self):
+        client = FakeClient((make_message(8, photo=object()),))
+        client.get_media_url = None
+
+        async def fail_download(*args, **kwargs):
+            raise RuntimeError("private client details")
+
+        client.download_media = fail_download
+        factory = FakeClientFactory(client)
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            parser = TelegramParser(
+                12345,
+                API_HASH,
+                SESSION_STRING,
+                client_factory=factory,
+                media_directory=temporary_directory,
+            )
+            with self.assertLogs(
+                "server.postparser_web.telegram_parser",
+                level="WARNING",
+            ) as logs:
+                posts = parser.fetch_posts(
+                    "channel_name",
+                    "2026-07-01",
+                    "2026-07-31",
+                )
+
+        self.assertEqual(posts[0]["image_url"], "")
+        self.assertNotIn("private client details", "\n".join(logs.output))
 
     def test_client_error_is_converted_to_parser_error(self):
         parser, client, _ = make_parser(error=RuntimeError("client failed"))

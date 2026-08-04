@@ -2,6 +2,8 @@ import os
 import re
 from typing import Any
 
+from server.postparser_web.config import get_data_dir
+
 from server.postparser_web.instagram_parser import (
     InstagramConfigurationError,
     InstagramParser,
@@ -29,6 +31,7 @@ TELEGRAM_API_ID_ENVIRONMENT_VARIABLE = "TELEGRAM_API_ID"
 TELEGRAM_API_HASH_ENVIRONMENT_VARIABLE = "TELEGRAM_API_HASH"
 TELEGRAM_SESSION_STRING_ENVIRONMENT_VARIABLE = "TELEGRAM_SESSION_STRING"
 TELEGRAM_SESSION_NAME_ENVIRONMENT_VARIABLE = "TELEGRAM_SESSION_NAME"
+PUBLIC_BASE_URL_ENVIRONMENT_VARIABLE = "POSTPARSER_PUBLIC_BASE_URL"
 
 
 class ParseServiceError(Exception):
@@ -114,6 +117,11 @@ def _create_telegram_parser() -> TelegramParser:
         api_hash,
         session_string=session_string or None,
         session_name=session_name if not session_string else None,
+        media_directory=get_data_dir() / "media" / "telegram",
+        public_base_url=os.environ.get(
+            PUBLIC_BASE_URL_ENVIRONMENT_VARIABLE,
+            "",
+        ).strip(),
     )
 
 

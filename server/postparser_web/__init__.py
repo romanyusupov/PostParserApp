@@ -9,6 +9,7 @@ from server.postparser_web.google_sheets_export import (
 )
 from server.postparser_web.health_routes import health_bp
 from server.postparser_web.instagram_oauth import instagram_oauth_bp
+from server.postparser_web.media_routes import media_bp
 from server.postparser_web.parse_routes import parse_bp
 from server.postparser_web.parse_runner import ParseRunnerService
 from server.postparser_web.parse_service import ParseService
@@ -87,6 +88,7 @@ def create_app(test_config=None):
     app.extensions["parse_runner"] = parse_runner
     app.register_blueprint(health_bp)
     app.register_blueprint(instagram_oauth_bp)
+    app.register_blueprint(media_bp)
     app.register_blueprint(settings_blueprint)
     app.register_blueprint(settings_page_blueprint)
     app.register_blueprint(vk_blueprint)

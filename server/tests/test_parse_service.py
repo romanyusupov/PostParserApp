@@ -1,4 +1,5 @@
 import os
+import pathlib
 import unittest
 from unittest import mock
 
@@ -214,6 +215,8 @@ class TelegramParserFactoryTestCase(unittest.TestCase):
             "secret-hash",
             session_string=None,
             session_name="C:\\private\\telegram.session",
+            media_directory=mock.ANY,
+            public_base_url="",
         )
 
     def test_session_string_has_priority_over_file_session(self):
@@ -237,6 +240,40 @@ class TelegramParserFactoryTestCase(unittest.TestCase):
             "secret-hash",
             session_string="secret-session",
             session_name=None,
+            media_directory=mock.ANY,
+            public_base_url="",
+        )
+
+    def test_telegram_media_configuration_is_passed_from_environment(self):
+        environment = {
+            "POSTPARSER_DATA_DIR": "C:\\private\\data",
+            "POSTPARSER_PUBLIC_BASE_URL": "https://parser.example.test/",
+            "TELEGRAM_API_ID": "12345",
+            "TELEGRAM_API_HASH": "secret-hash",
+            "TELEGRAM_SESSION_NAME": "C:\\private\\telegram.session",
+        }
+
+        with (
+            mock.patch.dict("os.environ", environment, clear=True),
+            mock.patch(
+                "server.postparser_web.parse_service.TelegramParser"
+            ) as parser_class,
+        ):
+            _create_telegram_parser()
+
+        self.assertEqual(
+            parser_class.call_args.kwargs["media_directory"],
+            mock.ANY,
+        )
+        self.assertEqual(
+            parser_class.call_args.kwargs["media_directory"],
+            pathlib.Path(environment["POSTPARSER_DATA_DIR"])
+            / "media"
+            / "telegram",
+        )
+        self.assertEqual(
+            parser_class.call_args.kwargs["public_base_url"],
+            "https://parser.example.test/",
         )
 
     def test_missing_sessions_are_rejected(self):

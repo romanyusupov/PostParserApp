@@ -1,8 +1,15 @@
 import asyncio
 import datetime
+import hashlib
 import inspect
+import logging
+import pathlib
+import tempfile
 import urllib.parse
 from typing import Any
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class TelegramParserError(Exception):
@@ -222,6 +229,8 @@ class TelegramParser:
         session_string: Any = None,
         session_name: Any = None,
         client_factory: Any = None,
+        media_directory: Any = None,
+        public_base_url: Any = None,
     ):
         normalized_api_id = str(api_id or "").strip()
         normalized_api_hash = str(api_hash or "").strip()
@@ -265,6 +274,13 @@ class TelegramParser:
             and not self._session_name
         )
         self._client_factory = factory
+        media_directory_value = str(media_directory or "").strip()
+        self._media_directory = (
+            pathlib.Path(media_directory_value)
+            if media_directory_value
+            else None
+        )
+        self._public_base_url = str(public_base_url or "").strip().rstrip("/")
 
     def _safe_error_message(self, error: Exception) -> str:
         message = " ".join(str(error or "").split())
@@ -279,13 +295,87 @@ class TelegramParser:
 
         return message[:500] or "Неизвестная ошибка Telegram."
 
-    async def _media_url(self, client: Any, message: Any, media_type: str) -> str:
-        resolver = getattr(client, "get_media_url", None)
-        if not callable(resolver):
+    def _stored_photo_url(self, channel_username: str, message_id: int) -> str:
+        digest = hashlib.sha256(
+            f"{channel_username.casefold()}:{message_id}".encode("utf-8")
+        ).hexdigest()
+        relative_url = f"/media/telegram/{digest}.jpg"
+        if not self._public_base_url:
+            return relative_url
+        return self._public_base_url + relative_url
+
+    async def _download_photo(
+        self,
+        client: Any,
+        message: Any,
+        channel_username: str,
+    ) -> str:
+        if self._media_directory is None:
             return ""
 
-        value = await _await_if_needed(resolver(message, media_type))
-        return str(value or "").strip()
+        downloader = getattr(client, "download_media", None)
+        if not callable(downloader):
+            return ""
+
+        message_id = _safe_int(getattr(message, "id", None))
+        if message_id <= 0:
+            return ""
+
+        target_url = self._stored_photo_url(channel_username, message_id)
+        target_path = self._media_directory / pathlib.PurePosixPath(
+            urllib.parse.urlsplit(target_url).path
+        ).name
+
+        try:
+            if target_path.is_file() and target_path.stat().st_size > 0:
+                return target_url
+
+            photo_bytes = await _await_if_needed(
+                downloader(message, file=bytes, thumb=-1)
+            )
+            if not isinstance(photo_bytes, (bytes, bytearray)) or not photo_bytes:
+                return ""
+
+            self._media_directory.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(
+                dir=self._media_directory,
+                prefix="telegram-photo-",
+                suffix=".tmp",
+                delete=False,
+            ) as temporary_file:
+                temporary_file.write(bytes(photo_bytes))
+                temporary_path = pathlib.Path(temporary_file.name)
+            try:
+                temporary_path.replace(target_path)
+            finally:
+                temporary_path.unlink(missing_ok=True)
+            return target_url
+        except Exception:
+            LOGGER.warning(
+                "Не удалось сохранить изображение Telegram для сообщения %s.",
+                message_id,
+            )
+            return ""
+
+    async def _media_url(
+        self,
+        client: Any,
+        message: Any,
+        media_type: str,
+        channel_username: str,
+    ) -> str:
+        resolver = getattr(client, "get_media_url", None)
+        if callable(resolver):
+            value = await _await_if_needed(resolver(message, media_type))
+            return str(value or "").strip()
+
+        if media_type == "photo":
+            return await self._download_photo(
+                client,
+                message,
+                channel_username,
+            )
+        return ""
 
     async def _fetch_posts(
         self,
@@ -352,12 +442,14 @@ class TelegramParser:
                         client,
                         message,
                         "video",
+                        entity_username,
                     )
                 elif post_type == "Фото":
                     image_url = await self._media_url(
                         client,
                         message,
                         "photo",
+                        entity_username,
                     )
 
                 result.append(
