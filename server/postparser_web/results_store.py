@@ -425,6 +425,105 @@ class ResultsStore:
 
         return [dict(row) for row in rows]
 
+    def prune_group_runs(self, group_id: Any, keep: Any = 3) -> int:
+        normalized_group_id = _safe_text(group_id).strip()
+        if not normalized_group_id:
+            raise ResultsStoreError(
+                "Идентификатор группы не указан."
+            )
+
+        if isinstance(keep, bool):
+            raise ResultsStoreError(
+                "Количество хранимых запусков должно быть положительным числом."
+            )
+        try:
+            normalized_keep = int(keep)
+        except (TypeError, ValueError, OverflowError):
+            raise ResultsStoreError(
+                "Количество хранимых запусков должно быть положительным числом."
+            ) from None
+        if normalized_keep <= 0:
+            raise ResultsStoreError(
+                "Количество хранимых запусков должно быть положительным числом."
+            )
+
+        connection = self._connect()
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            retained_rows = connection.execute(
+                """
+                SELECT id
+                FROM parse_runs
+                WHERE group_id = ?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (normalized_group_id, normalized_keep),
+            ).fetchall()
+            retained_ids = [int(row["id"]) for row in retained_rows]
+            placeholders = ", ".join("?" for _ in retained_ids)
+            query = (
+                "DELETE FROM parse_runs "
+                "WHERE group_id = ? AND status != ?"
+            )
+            parameters: list[Any] = [
+                normalized_group_id,
+                RUNNING_STATUS,
+            ]
+            if retained_ids:
+                query += f" AND id NOT IN ({placeholders})"
+                parameters.extend(retained_ids)
+            cursor = connection.execute(query, parameters)
+            deleted_count = max(0, cursor.rowcount)
+            connection.commit()
+            return deleted_count
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    def prune_all_group_runs(self, keep: Any = 3) -> int:
+        connection = self._connect()
+        try:
+            group_ids = [
+                row["group_id"]
+                for row in connection.execute(
+                    "SELECT DISTINCT group_id FROM parse_runs"
+                ).fetchall()
+            ]
+        finally:
+            connection.close()
+
+        return sum(
+            self.prune_group_runs(group_id, keep)
+            for group_id in group_ids
+        )
+
+    def list_image_urls(self) -> set[str]:
+        connection = self._connect()
+        try:
+            rows = connection.execute(
+                """
+                SELECT DISTINCT image_url
+                FROM posts
+                WHERE image_url != ''
+                """
+            ).fetchall()
+        finally:
+            connection.close()
+
+        return {str(row["image_url"]) for row in rows}
+
+    def maintain_database(self) -> None:
+        connection = self._connect()
+        try:
+            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            connection.execute("VACUUM")
+            connection.execute("PRAGMA optimize")
+        finally:
+            connection.close()
+
     def save_posts(self, run_id: Any, posts: Any) -> int:
         normalized_run_id = _positive_run_id(run_id)
         if not isinstance(posts, (list, tuple)):

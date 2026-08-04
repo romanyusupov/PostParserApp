@@ -160,6 +160,89 @@ class ResultsStoreTestCase(unittest.TestCase):
             list(reversed(run_ids))[:50],
         )
 
+    def test_prune_group_runs_keeps_three_latest_and_running_runs(self):
+        old_running = self.store.create_run("group_1", "Group", "telegram")
+        completed_ids = []
+        for index in range(4):
+            run_id = self.store.create_run("group_1", "Group", "telegram")
+            self.store.save_posts(
+                run_id,
+                [make_post("telegram", f"post_{index}")],
+            )
+            self.store.finish_run(run_id, 1)
+            completed_ids.append(run_id)
+        other_group_run = self.store.create_run("group_2", "Other", "vk")
+        self.store.finish_run(other_group_run, 0)
+
+        deleted = self.store.prune_group_runs("group_1", keep=3)
+
+        remaining_ids = {
+            run["id"] for run in self.store.list_runs(limit=50)
+        }
+        self.assertEqual(deleted, 1)
+        self.assertIn(old_running, remaining_ids)
+        self.assertNotIn(completed_ids[0], remaining_ids)
+        self.assertTrue(set(completed_ids[1:]).issubset(remaining_ids))
+        self.assertIn(other_group_run, remaining_ids)
+        self.assertEqual(
+            {
+                post["external_id"]
+                for post in self.store.get_posts(group_id="group_1")
+            },
+            {"post_1", "post_2", "post_3"},
+        )
+
+    def test_prune_all_group_runs_is_idempotent(self):
+        for group_id in ("group_1", "group_2"):
+            for index in range(5):
+                run_id = self.store.create_run(group_id, group_id, "vk")
+                self.store.finish_run(run_id, index)
+
+        self.assertEqual(self.store.prune_all_group_runs(keep=3), 4)
+        self.assertEqual(self.store.prune_all_group_runs(keep=3), 0)
+        groups = {}
+        for run in self.store.list_runs(limit=50):
+            groups.setdefault(run["group_id"], []).append(run["id"])
+        self.assertEqual({key: len(value) for key, value in groups.items()}, {
+            "group_1": 3,
+            "group_2": 3,
+        })
+
+    def test_list_image_urls_returns_only_stored_nonempty_values(self):
+        run_id = self.store.create_run("group_1", "Group", "telegram")
+        self.store.save_posts(
+            run_id,
+            [
+                make_post("telegram", "one", image_url="/media/telegram/a.jpg"),
+                make_post("telegram", "two", image_url="/media/telegram/a.jpg"),
+                make_post("telegram", "three", image_url=""),
+            ],
+        )
+
+        self.assertEqual(
+            self.store.list_image_urls(),
+            {"/media/telegram/a.jpg"},
+        )
+
+    def test_database_maintenance_leaves_database_valid(self):
+        run_id = self.store.create_run("group_1", "Group", "vk")
+        self.store.save_posts(
+            run_id,
+            [make_post("vk", f"post_{index}", text="x" * 1000) for index in range(50)],
+        )
+        self.store.finish_run(run_id, 50)
+
+        self.store.maintain_database()
+
+        connection = sqlite3.connect(self.database_path)
+        try:
+            integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
+            free_pages = connection.execute("PRAGMA freelist_count").fetchone()[0]
+        finally:
+            connection.close()
+        self.assertEqual(integrity, "ok")
+        self.assertEqual(free_pages, 0)
+
     def test_existing_database_is_migrated_with_compatible_statuses(self):
         legacy_path = (
             pathlib.Path(self.temporary_directory.name)

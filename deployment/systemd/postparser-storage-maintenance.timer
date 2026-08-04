@@ -1,0 +1,11 @@
+[Unit]
+Description=Run PostParser storage maintenance nightly
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=postparser-storage-maintenance.service
+
+[Install]
+WantedBy=timers.target

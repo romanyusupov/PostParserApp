@@ -1,5 +1,7 @@
 from typing import Any
 
+from server.postparser_web.storage_maintenance import cleanup_after_success
+
 
 class ParseRunnerError(Exception):
     """Ошибка координации парсинга и сохранения результатов."""
@@ -68,6 +70,7 @@ class ParseRunnerService:
         settings_store: Any,
         parse_service: Any,
         results_store: Any,
+        storage_retention: Any = None,
     ):
         _required_method(settings_store, "load", "SettingsStore")
         _required_method(parse_service, "parse_group", "ParseService")
@@ -79,6 +82,7 @@ class ParseRunnerService:
         self._settings_store = settings_store
         self._parse_service = parse_service
         self._results_store = results_store
+        self._storage_retention = storage_retention
 
     def _mark_failed(
         self,
@@ -139,6 +143,12 @@ class ParseRunnerService:
         except Exception as error:
             self._mark_failed(run_id, saved_count, error)
             raise
+
+        if self._storage_retention is not None:
+            cleanup_after_success(
+                self._storage_retention,
+                normalized_group_id,
+            )
 
         result = {
             "run_id": run_id,

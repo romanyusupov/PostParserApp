@@ -114,6 +114,18 @@ class FinishFailingResultsStore(ResultsStore):
         raise RuntimeError("finish failed")
 
 
+class FakeStorageRetention:
+    def __init__(self, error=None):
+        self.error = error
+        self.calls = []
+
+    def cleanup_group(self, group_id):
+        self.calls.append(group_id)
+        if self.error is not None:
+            raise self.error
+        return {"deleted_runs": 0, "deleted_media": 0}
+
+
 class ParseRunnerServiceTestCase(unittest.TestCase):
     def setUp(self):
         self.group = make_group()
@@ -178,6 +190,37 @@ class ParseRunnerServiceTestCase(unittest.TestCase):
             },
         )
 
+    def test_successful_run_triggers_storage_retention(self):
+        retention = FakeStorageRetention()
+        runner = ParseRunnerService(
+            self.settings_store,
+            self.parse_service,
+            self.results_store,
+            storage_retention=retention,
+        )
+
+        runner.run_group("group_1")
+
+        self.assertEqual(retention.calls, ["group_1"])
+
+    def test_storage_retention_error_does_not_fail_completed_run(self):
+        retention = FakeStorageRetention(RuntimeError("cleanup failed"))
+        runner = ParseRunnerService(
+            self.settings_store,
+            self.parse_service,
+            self.results_store,
+            storage_retention=retention,
+        )
+
+        with self.assertLogs(
+            "server.postparser_web.storage_maintenance",
+            level="ERROR",
+        ):
+            result = runner.run_group("group_1")
+
+        self.assertEqual(result["run_id"], 42)
+        self.assertEqual(self.results_store.fail_calls, [])
+
     def test_parser_error_marks_run_as_failed(self):
         source_error = RuntimeError("parser failed")
         parse_service = FakeParseService(error=source_error)
@@ -193,6 +236,20 @@ class ParseRunnerServiceTestCase(unittest.TestCase):
         self.assertIs(context.exception, source_error)
         self.assertEqual(self.results_store.fail_calls, [(42, 0)])
         self.assertEqual(self.results_store.finish_calls, [])
+
+    def test_failed_run_does_not_trigger_storage_retention(self):
+        retention = FakeStorageRetention()
+        runner = ParseRunnerService(
+            self.settings_store,
+            FakeParseService(error=RuntimeError("parser failed")),
+            self.results_store,
+            storage_retention=retention,
+        )
+
+        with self.assertRaises(RuntimeError):
+            runner.run_group("group_1")
+
+        self.assertEqual(retention.calls, [])
 
     def test_insights_warning_completes_run_and_preserves_posts(self):
         warning = (

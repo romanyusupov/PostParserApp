@@ -20,6 +20,10 @@ from server.postparser_web.run_routes import run_bp
 from server.postparser_web.settings_page import settings_page_blueprint
 from server.postparser_web.settings_routes import settings_blueprint
 from server.postparser_web.settings_store import SettingsStore
+from server.postparser_web.storage_maintenance import (
+    StorageRetentionService,
+    register_storage_maintenance_command,
+)
 from server.postparser_web.vk_routes import vk_blueprint
 
 
@@ -52,6 +56,21 @@ def create_app(test_config=None):
 
     app.extensions["results_store"] = results_store
 
+    telegram_media_directory = app.config.get(
+        "TELEGRAM_MEDIA_DIRECTORY"
+    )
+    if telegram_media_directory is None:
+        telegram_media_directory = pathlib.Path(
+            app.config["SETTINGS_DATABASE_PATH"]
+        ).parent / "media" / "telegram"
+    storage_retention = app.config.get("STORAGE_RETENTION")
+    if storage_retention is None:
+        storage_retention = StorageRetentionService(
+            results_store,
+            telegram_media_directory,
+        )
+    app.extensions["storage_retention"] = storage_retention
+
     google_sheets_exporter = app.config.get("GOOGLE_SHEETS_EXPORTER")
     if google_sheets_exporter is None:
         try:
@@ -82,6 +101,7 @@ def create_app(test_config=None):
             settings_store,
             parse_service,
             results_store,
+            storage_retention=storage_retention,
         )
         app.extensions["parse_service"] = parse_service
 
@@ -96,5 +116,6 @@ def create_app(test_config=None):
     app.register_blueprint(run_bp)
     app.register_blueprint(results_bp)
     app.register_blueprint(results_export_bp)
+    register_storage_maintenance_command(app)
 
     return app
