@@ -66,6 +66,18 @@ class SettingsPageTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
 
+    def test_home_page_redirects_to_settings(self):
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], "/shadow/settings")
+
+    def test_home_page_redirect_opens_settings_interface(self):
+        response = self.client.get("/", follow_redirects=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Настройки парсера", response.get_data(as_text=True))
+
     def test_settings_page_contains_title(self):
         page = self.get_page().get_data(as_text=True)
 
