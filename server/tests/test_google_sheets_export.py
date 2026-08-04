@@ -8,6 +8,7 @@ from unittest import mock
 
 from server.postparser_web.google_sheets_export import (
     EXPORT_HEADERS,
+    GoogleSheetsClient,
     GoogleSheetsConfigurationError,
     GoogleSheetsExporter,
     GoogleSheetsExportError,
@@ -66,6 +67,62 @@ class MockClient:
             (spreadsheet_id, sheet_name, copied_rows)
         )
         self.sheet_values[sheet_name] = copied_rows
+
+
+class FakeGoogleRequest:
+    def execute(self):
+        return {}
+
+
+class FakeGoogleValuesResource:
+    def __init__(self):
+        self.update_calls = []
+        self.batch_update_calls = []
+
+    def update(self, **kwargs):
+        self.update_calls.append(kwargs)
+        return FakeGoogleRequest()
+
+    def batchUpdate(self, **kwargs):
+        self.batch_update_calls.append(kwargs)
+        return FakeGoogleRequest()
+
+
+class FakeGoogleSpreadsheetsResource:
+    def __init__(self):
+        self.values_resource = FakeGoogleValuesResource()
+        self.batch_update_calls = []
+
+    def values(self):
+        return self.values_resource
+
+    def get(self, **kwargs):
+        class MetadataRequest:
+            def execute(self):
+                return {
+                    "sheets": [
+                        {
+                            "properties": {
+                                "sheetId": 321,
+                                "title": GROUP_NAME,
+                            }
+                        }
+                    ]
+                }
+
+        return MetadataRequest()
+
+    def batchUpdate(self, **kwargs):
+        self.batch_update_calls.append(kwargs)
+        return FakeGoogleRequest()
+
+
+class FakeGoogleService:
+    def __init__(self):
+        self.spreadsheets_resource = FakeGoogleSpreadsheetsResource()
+
+    def spreadsheets(self):
+        return self.spreadsheets_resource
 
 
 def make_post(external_id="post_1", **values):
@@ -204,12 +261,12 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
                 "Ссылка",
                 "Дата",
                 "Первый абзац",
+                "Описание видео",
                 "Картинка",
                 "Просмотры",
                 "Лайки",
                 "Комментарии",
                 "Тип поста",
-                "Описание видео",
                 "Тип рекламы",
             ],
         )
@@ -226,12 +283,12 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
                 "https://example.test/post",
                 "2026-08-01T12:00:00+00:00",
                 "Первый абзац",
-                "https://example.test/image.jpg",
+                "Описание видео",
+                '=IMAGE("https://example.test/image.jpg")',
                 10,
                 5,
                 2,
                 "Фото",
-                "Описание видео",
                 "Партнёрская публикация",
             ],
         )
@@ -247,9 +304,79 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
                 advertising_type=None,
             )
         )
+        self.assertEqual(row[4], "")
+        self.assertEqual(row[5:8], ["", "", ""])
         self.assertEqual(row[3], "")
-        self.assertEqual(row[4:7], ["", "", ""])
-        self.assertEqual(row[8:], ["", ""])
+        self.assertEqual(row[9], "")
+
+    def test_image_is_exported_as_safe_in_cell_formula(self):
+        row = build_export_row(
+            make_post(
+                image_url='https://example.test/image?name="cover"',
+            )
+        )
+
+        self.assertEqual(
+            row[4],
+            '=IMAGE("https://example.test/image?name=""cover""")',
+        )
+
+    def test_invalid_image_url_is_not_exported_as_formula(self):
+        row = build_export_row(
+            make_post(image_url='=IMPORTDATA("https://private.test")')
+        )
+
+        self.assertEqual(row[4], "")
+
+    def test_only_image_cells_are_written_as_user_entered_formulas(self):
+        service = FakeGoogleService()
+        client = GoogleSheetsClient(service)
+        rows = [
+            ["Header"],
+            ["url", "date", "text", "video", '=IMAGE("https://example.test/a.jpg")'],
+            ["url", "date", "text", "video", ""],
+        ]
+
+        client.write_values(SPREADSHEET_ID, GROUP_NAME, rows)
+
+        values_resource = service.spreadsheets_resource.values_resource
+        self.assertEqual(
+            values_resource.update_calls[0]["valueInputOption"],
+            "RAW",
+        )
+        self.assertEqual(len(values_resource.batch_update_calls), 1)
+        formula_write = values_resource.batch_update_calls[0]
+        self.assertEqual(
+            formula_write["body"]["valueInputOption"],
+            "USER_ENTERED",
+        )
+        self.assertEqual(
+            formula_write["body"]["data"],
+            [
+                {
+                    "range": "'" + GROUP_NAME + "'!E2",
+                    "values": [['=IMAGE("https://example.test/a.jpg")']],
+                }
+            ],
+        )
+        format_request = (
+            service.spreadsheets_resource.batch_update_calls[0]
+            ["body"]["requests"][0]["repeatCell"]
+        )
+        self.assertEqual(
+            format_request["cell"]["userEnteredFormat"]["wrapStrategy"],
+            "WRAP",
+        )
+        self.assertEqual(
+            format_request["range"],
+            {
+                "sheetId": 321,
+                "startRowIndex": 0,
+                "endRowIndex": 3,
+                "startColumnIndex": 0,
+                "endColumnIndex": 5,
+            },
+        )
 
     def test_repeated_export_replaces_data_without_duplicates(self):
         run_id = self.create_run(posts=[make_post()])

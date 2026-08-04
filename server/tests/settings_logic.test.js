@@ -7,6 +7,42 @@ const settingsLogic = require(
   "../postparser_web/static/settings_logic.js"
 );
 
+test("date presets calculate local ranges from today", function () {
+  const today = new Date(2026, 7, 4);
+
+  assert.deepEqual(
+    settingsLogic.calculateDateRange("today", today),
+    { dateStart: "2026-08-04", dateEnd: "2026-08-04" }
+  );
+  assert.deepEqual(
+    settingsLogic.calculateDateRange("week", today),
+    { dateStart: "2026-07-28", dateEnd: "2026-08-04" }
+  );
+  assert.deepEqual(
+    settingsLogic.calculateDateRange("month", today),
+    { dateStart: "2026-07-04", dateEnd: "2026-08-04" }
+  );
+  assert.deepEqual(
+    settingsLogic.calculateDateRange("three-months", today),
+    { dateStart: "2026-05-04", dateEnd: "2026-08-04" }
+  );
+  assert.deepEqual(
+    settingsLogic.calculateDateRange("six-months", today),
+    { dateStart: "2026-02-04", dateEnd: "2026-08-04" }
+  );
+  assert.deepEqual(
+    settingsLogic.calculateDateRange("year", today),
+    { dateStart: "2025-08-04", dateEnd: "2026-08-04" }
+  );
+});
+
+test("calendar month presets clamp the day at month end", function () {
+  assert.deepEqual(
+    settingsLogic.calculateDateRange("month", new Date(2026, 2, 31)),
+    { dateStart: "2026-02-28", dateEnd: "2026-03-31" }
+  );
+});
+
 
 test("unsaved dates are saved before the parser run", async function () {
   const draft = {

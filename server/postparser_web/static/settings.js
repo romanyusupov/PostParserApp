@@ -157,6 +157,50 @@
     return input;
   }
 
+  function createDatePresetButtons(groupIndex) {
+    const presets = [
+      ["today", "Сегодня"],
+      ["week", "Неделя"],
+      ["month", "Месяц"],
+      ["three-months", "Три месяца"],
+      ["six-months", "Шесть месяцев"],
+      ["year", "Год"],
+    ];
+    const field = createElement("div", "date-presets field");
+    const label = createElement(
+      "span",
+      "field-label",
+      "Быстрый выбор периода"
+    );
+    const buttons = createElement("div", "date-preset-buttons");
+
+    presets.forEach(function (preset) {
+      const button = createButton(
+        preset[1],
+        "button button-ghost date-preset-button",
+        function () {
+          const range = settingsLogic.calculateDateRange(
+            preset[0],
+            new Date()
+          );
+          groups[groupIndex].dateStart = range.dateStart;
+          groups[groupIndex].dateEnd = range.dateEnd;
+          markDirty();
+          renderGroups();
+        }
+      );
+      button.setAttribute(
+        "aria-label",
+        "Установить период: " + preset[1].toLowerCase()
+      );
+      buttons.appendChild(button);
+    });
+
+    field.appendChild(label);
+    field.appendChild(buttons);
+    return field;
+  }
+
   function createNetworkSelect(value, onInput) {
     const select = createElement("select", "input");
     const networks = [
@@ -417,6 +461,7 @@
         })
       )
     );
+    scheduleGrid.appendChild(createDatePresetButtons(groupIndex));
     card.appendChild(scheduleGrid);
 
     const typesSection = createElement("section", "types-section");

@@ -226,6 +226,26 @@ class SettingsPageTestCase(unittest.TestCase):
         self.assertIn(".identity-grid", stylesheet)
         self.assertIn(".schedule-grid", stylesheet)
 
+    def test_date_presets_are_available_and_mark_settings_dirty(self):
+        stylesheet = self.get_stylesheet()
+        script = self.get_script()
+
+        for label in (
+            "Сегодня",
+            "Неделя",
+            "Месяц",
+            "Три месяца",
+            "Шесть месяцев",
+            "Год",
+        ):
+            self.assertIn(label, script)
+
+        self.assertIn("settingsLogic.calculateDateRange(", script)
+        self.assertIn("groups[groupIndex].dateStart = range.dateStart;", script)
+        self.assertIn("groups[groupIndex].dateEnd = range.dateEnd;", script)
+        self.assertIn("markDirty();", script)
+        self.assertIn(".date-preset-buttons", stylesheet)
+
     def test_parse_launch_uses_post_api(self):
         script = self.get_script()
 

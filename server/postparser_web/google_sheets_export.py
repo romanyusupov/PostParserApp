@@ -4,6 +4,7 @@ import os
 import pathlib
 import re
 import stat
+import urllib.parse
 from typing import Any
 
 
@@ -18,12 +19,12 @@ EXPORT_HEADERS = (
     "Ссылка",
     "Дата",
     "Первый абзац",
+    "Описание видео",
     "Картинка",
     "Просмотры",
     "Лайки",
     "Комментарии",
     "Тип поста",
-    "Описание видео",
     "Тип рекламы",
 )
 
@@ -61,6 +62,22 @@ def _safe_metric(value: Any) -> Any:
         return ""
 
 
+def _image_formula(value: Any) -> str:
+    image_url = _safe_text(value).strip()
+    if not image_url:
+        return ""
+
+    parsed_url = urllib.parse.urlparse(image_url)
+    if (
+        parsed_url.scheme not in {"http", "https"}
+        or not parsed_url.hostname
+    ):
+        return ""
+
+    escaped_url = image_url.replace('"', '""')
+    return f'=IMAGE("{escaped_url}")'
+
+
 def build_sheet_name(run: dict[str, Any]) -> str:
     raw_name = _safe_text(run.get("group_name")).strip() or "Группа"
     safe_name = re.sub(r"[\[\]:*?/\\]", " ", raw_name)
@@ -73,12 +90,12 @@ def build_export_row(post: dict[str, Any]) -> list[Any]:
         _safe_text(post.get("url")),
         _safe_text(post.get("published_at")),
         _safe_text(post.get("first_paragraph")),
-        _safe_text(post.get("image_url")),
+        _safe_text(post.get("video_description")),
+        _image_formula(post.get("image_url")),
         _safe_metric(post.get("views")),
         _safe_metric(post.get("likes")),
         _safe_metric(post.get("comments")),
         _safe_text(post.get("post_type")),
-        _safe_text(post.get("video_description")),
         _safe_text(post.get("advertising_type")),
     ]
 
@@ -154,12 +171,93 @@ class GoogleSheetsClient:
         sheet_name: str,
         rows: list[list[Any]],
     ) -> None:
-        self._service.spreadsheets().values().update(
+        spreadsheets_resource = self._service.spreadsheets()
+        values_resource = spreadsheets_resource.values()
+        values_resource.update(
             spreadsheetId=spreadsheet_id,
             range=_quoted_sheet_name(sheet_name) + "!A1",
             valueInputOption="RAW",
             body={"values": rows},
         ).execute()
+
+        image_formulas = []
+        for row_number, row in enumerate(rows, start=1):
+            if len(row) <= 4:
+                continue
+
+            formula = row[4]
+            if not (
+                isinstance(formula, str)
+                and formula.startswith('=IMAGE("')
+                and formula.endswith('")')
+            ):
+                continue
+
+            image_formulas.append(
+                {
+                    "range": (
+                        _quoted_sheet_name(sheet_name)
+                        + f"!E{row_number}"
+                    ),
+                    "values": [[formula]],
+                }
+            )
+
+        if image_formulas:
+            values_resource.batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body={
+                    "valueInputOption": "USER_ENTERED",
+                    "data": image_formulas,
+                },
+            ).execute()
+
+        sheet_metadata = spreadsheets_resource.get(
+            spreadsheetId=spreadsheet_id,
+            fields="sheets.properties(sheetId,title)",
+            includeGridData=False,
+        ).execute()
+        sheet_id = next(
+            (
+                sheet.get("properties", {}).get("sheetId")
+                for sheet in sheet_metadata.get("sheets", [])
+                if sheet.get("properties", {}).get("title") == sheet_name
+            ),
+            None,
+        )
+        if sheet_id is None:
+            raise GoogleSheetsExportError(
+                "Не удалось определить лист для форматирования."
+            )
+
+        column_count = max((len(row) for row in rows), default=0)
+        if rows and column_count:
+            spreadsheets_resource.batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body={
+                    "requests": [
+                        {
+                            "repeatCell": {
+                                "range": {
+                                    "sheetId": sheet_id,
+                                    "startRowIndex": 0,
+                                    "endRowIndex": len(rows),
+                                    "startColumnIndex": 0,
+                                    "endColumnIndex": column_count,
+                                },
+                                "cell": {
+                                    "userEnteredFormat": {
+                                        "wrapStrategy": "WRAP",
+                                    }
+                                },
+                                "fields": (
+                                    "userEnteredFormat.wrapStrategy"
+                                ),
+                            }
+                        }
+                    ]
+                },
+            ).execute()
 
 
 class GoogleSheetsExporter:

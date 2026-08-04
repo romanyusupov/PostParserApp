@@ -384,6 +384,22 @@ h1 {
   padding-bottom: 20px;
 }
 
+.date-presets {
+  grid-column: 2 / -1;
+}
+
+.date-preset-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.date-preset-button {
+  min-height: 34px;
+  padding: 6px 11px;
+  font-size: 13px;
+}
+
 .id-field {
   grid-column: 1 / -1;
   max-width: 420px;
@@ -600,6 +616,10 @@ h1 {
   .identity-grid,
   .schedule-grid {
     grid-template-columns: 1fr;
+  }
+
+  .date-presets {
+    grid-column: auto;
   }
 
   .fields-grid {
