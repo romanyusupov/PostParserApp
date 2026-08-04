@@ -7,6 +7,11 @@ from server.postparser_web.instagram_parser import (
     InstagramParser,
     InstagramParserError,
 )
+from server.postparser_web.instagram_token_store import (
+    INSTAGRAM_ACCESS_TOKEN_ENVIRONMENT_VARIABLE,
+    InstagramTokenStorageError,
+    load_instagram_access_token,
+)
 from server.postparser_web.telegram_parser import (
     TelegramConfigurationError,
     TelegramParser,
@@ -20,9 +25,6 @@ from server.postparser_web.vk_parser import (
 
 
 VK_ACCESS_TOKEN_ENVIRONMENT_VARIABLE = "POSTPARSER_VK_ACCESS_TOKEN"
-INSTAGRAM_ACCESS_TOKEN_ENVIRONMENT_VARIABLE = (
-    "POSTPARSER_INSTAGRAM_ACCESS_TOKEN"
-)
 TELEGRAM_API_ID_ENVIRONMENT_VARIABLE = "TELEGRAM_API_ID"
 TELEGRAM_API_HASH_ENVIRONMENT_VARIABLE = "TELEGRAM_API_HASH"
 TELEGRAM_SESSION_STRING_ENVIRONMENT_VARIABLE = "TELEGRAM_SESSION_STRING"
@@ -64,10 +66,12 @@ def _create_vk_parser() -> VkParser:
 
 
 def _create_instagram_parser() -> InstagramParser:
-    access_token = os.environ.get(
-        INSTAGRAM_ACCESS_TOKEN_ENVIRONMENT_VARIABLE,
-        "",
-    ).strip()
+    try:
+        access_token = load_instagram_access_token()
+    except InstagramTokenStorageError:
+        raise ParseConfigurationError(
+            "Instagram-подключение не настроено."
+        ) from None
 
     if not access_token:
         raise ParseConfigurationError(

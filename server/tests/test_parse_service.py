@@ -1,3 +1,4 @@
+import os
 import unittest
 from unittest import mock
 
@@ -7,6 +8,7 @@ from server.postparser_web.parse_service import (
     ParseService,
     ParserExecutionError,
     UnsupportedNetworkError,
+    _create_instagram_parser,
     _create_telegram_parser,
 )
 from server.postparser_web.vk_parser import VkParserError
@@ -153,6 +155,41 @@ class ParseServiceSelectionTestCase(unittest.TestCase):
             {network: factory.calls for network, factory in factories.items()},
             {"vk": 0, "instagram": 0, "telegram": 1},
         )
+
+
+class InstagramParserFactoryTestCase(unittest.TestCase):
+    def test_environment_access_token_is_accepted(self):
+        with (
+            mock.patch.dict(
+                os.environ,
+                {"POSTPARSER_INSTAGRAM_ACCESS_TOKEN": "environment-token"},
+                clear=True,
+            ),
+            mock.patch(
+                "server.postparser_web.parse_service.InstagramParser"
+            ) as parser_class,
+        ):
+            parser = _create_instagram_parser()
+
+        self.assertIs(parser, parser_class.return_value)
+        parser_class.assert_called_once_with("environment-token")
+
+    def test_oauth_token_storage_is_accepted(self):
+        with (
+            mock.patch.dict(os.environ, {}, clear=True),
+            mock.patch(
+                "server.postparser_web.parse_service."
+                "load_instagram_access_token",
+                return_value="stored-oauth-token",
+            ),
+            mock.patch(
+                "server.postparser_web.parse_service.InstagramParser"
+            ) as parser_class,
+        ):
+            parser = _create_instagram_parser()
+
+        self.assertIs(parser, parser_class.return_value)
+        parser_class.assert_called_once_with("stored-oauth-token")
 
 
 class TelegramParserFactoryTestCase(unittest.TestCase):
