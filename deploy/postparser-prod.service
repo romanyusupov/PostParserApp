@@ -1,0 +1,27 @@
+[Unit]
+Description=PostParser production strangler application
+After=network.target telegram-parser.service
+Wants=telegram-parser.service
+
+[Service]
+Type=simple
+User=postparser-prod
+Group=postparser-prod
+WorkingDirectory=/opt/postparser-prod
+EnvironmentFile=/etc/postparser-prod.env
+UMask=0077
+ExecStart=/opt/postparser-prod/venv/bin/gunicorn --workers 1 --threads 1 --timeout 320 --bind 127.0.0.1:5052 --access-logfile - --error-logfile - server.web_wsgi:app
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/postparser-prod /var/log/postparser-prod
+LogsDirectory=postparser-prod
+StandardOutput=append:/var/log/postparser-prod/access.log
+StandardError=append:/var/log/postparser-prod/error.log
+
+[Install]
+WantedBy=multi-user.target
