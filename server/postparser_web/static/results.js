@@ -7,10 +7,12 @@
   const tabs = window.PostParserTabs;
   const collapsedTextCharacters = 300;
   const collapsedTextLines = 6;
+  const collapsedRunsLimit = 3;
 
   const statusMessage = document.getElementById("statusMessage");
   const runsTableBody = document.getElementById("runsTableBody");
   const runsEmptyState = document.getElementById("runsEmptyState");
+  const runsToggleButton = document.getElementById("runsToggleButton");
   const postsSection = document.getElementById("postsSection");
   const postsTableBody = document.getElementById("postsTableBody");
   const postsEmptyState = document.getElementById("postsEmptyState");
@@ -32,6 +34,7 @@
   let allGroups = [];
   let allRuns = [];
   let visibleRuns = [];
+  let runsExpanded = false;
   let pendingSelectionNotice = "";
   let loadedPosts = [];
   let sortState = { field: null, direction: null };
@@ -233,6 +236,23 @@
   function renderRuns(runs) {
     runsTableBody.replaceChildren();
     runsEmptyState.hidden = runs.length !== 0;
+    const displayedRuns = resultsLogic.limitedRuns(
+      runs,
+      runsExpanded,
+      collapsedRunsLimit
+    );
+    const hasHiddenRuns = runs.length > collapsedRunsLimit;
+
+    runsToggleButton.hidden = !hasHiddenRuns;
+    runsToggleButton.textContent = resultsLogic.runsToggleLabel(
+      runs.length,
+      runsExpanded,
+      collapsedRunsLimit
+    );
+    runsToggleButton.setAttribute(
+      "aria-expanded",
+      runsExpanded ? "true" : "false"
+    );
 
     if (runs.length === 0) {
       selectedRunId = null;
@@ -240,7 +260,7 @@
       exportGoogleSheetsButton.hidden = true;
     }
 
-    runs.forEach(function (run) {
+    displayedRuns.forEach(function (run) {
       const row = createElement("tr");
       const currentGroup = allGroups.find(function (group) {
         return group.id === String(run.group_id || "");
@@ -482,6 +502,10 @@
     const requestedRun = visibleRuns.find(function (run) {
       return String(run.id) === String(requestedRunId || "");
     });
+    const requestedRunIndex = requestedRun
+      ? visibleRuns.indexOf(requestedRun)
+      : -1;
+    runsExpanded = requestedRunIndex >= collapsedRunsLimit;
     const selectedRun = requestedRun || visibleRuns[0] || null;
     selectedRunId = selectedRun ? selectedRun.id : null;
     renderGroupTabs();
@@ -564,6 +588,10 @@
   }
 
   exportGoogleSheetsButton.addEventListener("click", exportSelectedRun);
+  runsToggleButton.addEventListener("click", function () {
+    runsExpanded = !runsExpanded;
+    renderRuns(visibleRuns);
+  });
   sortButtons.forEach(function (button) {
     button.addEventListener("click", function () {
       sortState = resultsLogic.nextSortState(

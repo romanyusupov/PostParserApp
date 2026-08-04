@@ -118,3 +118,24 @@ test("metric normalization does not turn missing values into zero", function () 
   assert.equal(resultsLogic.metricValue("broken"), null);
   assert.equal(resultsLogic.metricValue(0), 0);
 });
+
+test("run list initially contains only the three latest entries", function () {
+  const runs = [{ id: 5 }, { id: 4 }, { id: 3 }, { id: 2 }, { id: 1 }];
+
+  assert.deepEqual(
+    resultsLogic.limitedRuns(runs, false, 3).map((run) => run.id),
+    [5, 4, 3]
+  );
+  assert.deepEqual(
+    resultsLogic.limitedRuns(runs, true, 3).map((run) => run.id),
+    [5, 4, 3, 2, 1]
+  );
+});
+
+test("run list toggle label reports hidden count and collapse action", function () {
+  assert.equal(
+    resultsLogic.runsToggleLabel(8, false, 3),
+    "Показать остальные (5)"
+  );
+  assert.equal(resultsLogic.runsToggleLabel(8, true, 3), "Скрыть");
+});

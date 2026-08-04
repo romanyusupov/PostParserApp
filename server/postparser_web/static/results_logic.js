@@ -106,10 +106,28 @@
     }
   }
 
+  function limitedRuns(runs, expanded, limit) {
+    const source = Array.isArray(runs) ? runs : [];
+    const safeLimit = Number.isInteger(limit) && limit > 0 ? limit : 3;
+    return expanded ? source.slice() : source.slice(0, safeLimit);
+  }
+
+  function runsToggleLabel(total, expanded, limit) {
+    const safeTotal = Number.isInteger(total) && total > 0 ? total : 0;
+    const safeLimit = Number.isInteger(limit) && limit > 0 ? limit : 3;
+    const hiddenCount = Math.max(0, safeTotal - safeLimit);
+
+    return expanded
+      ? "Скрыть"
+      : "Показать остальные (" + String(hiddenCount) + ")";
+  }
+
   return {
     collapsedText: collapsedText,
     metricValue: metricValue,
     nextSortState: nextSortState,
+    limitedRuns: limitedRuns,
+    runsToggleLabel: runsToggleLabel,
     safeHttpUrl: safeHttpUrl,
     sortPosts: sortPosts,
   };

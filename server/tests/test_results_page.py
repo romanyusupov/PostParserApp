@@ -410,6 +410,18 @@ class ResultsPageTestCase(unittest.TestCase):
         self.assertIn("Экспортировать в Google Sheets", page)
         self.assertIn("hidden", page)
 
+    def test_runs_are_collapsed_to_three_and_can_be_expanded(self):
+        page = self.client.get("/results").get_data(as_text=True)
+        script = self.get_script()
+
+        self.assertIn('id="runsToggleButton"', page)
+        self.assertIn('aria-controls="runsTableBody"', page)
+        self.assertIn('aria-expanded="false"', page)
+        self.assertIn("const collapsedRunsLimit = 3;", script)
+        self.assertIn("resultsLogic.limitedRuns(", script)
+        self.assertIn("resultsLogic.runsToggleLabel(", script)
+        self.assertIn('runsToggleButton.addEventListener("click"', script)
+
     def test_results_script_calls_google_sheets_export_api(self):
         script = self.get_script()
 

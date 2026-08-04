@@ -257,6 +257,16 @@ tbody tr.is-selected td {
   text-align: center;
 }
 
+.runs-toggle {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.runs-toggle .button {
+  min-width: 190px;
+}
+
 .toolbar {
   gap: 12px;
   padding: 12px;
