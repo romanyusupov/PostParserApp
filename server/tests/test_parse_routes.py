@@ -6,6 +6,7 @@ from server.postparser_web import create_app
 from server.postparser_web.parse_runner import (
     ParseRunnerConfigurationError,
     ParseRunnerGroupNotFoundError,
+    ParseRunnerNetworkBlockedError,
 )
 from server.postparser_web.parse_service import ParserExecutionError
 
@@ -136,6 +137,14 @@ class ParseRoutesTestCase(unittest.TestCase):
             response.get_json()["error"],
             "Ошибка конфигурации парсера",
         )
+
+    def test_legacy_owned_network_returns_conflict_without_details(self):
+        self.runner.error = ParseRunnerNetworkBlockedError("internal policy")
+
+        response = self.post({"groupId": "group_1", "network": "vk"})
+
+        self.assertEqual(response.status_code, 409)
+        self.assertNotIn("internal policy", response.get_data(as_text=True))
 
     def test_internal_error_returns_server_error(self):
         self.runner.error = RuntimeError("internal private details")

@@ -7,6 +7,7 @@ from server.postparser_web.instagram_parser import (
 from server.postparser_web.parse_runner import (
     ParseRunnerConfigurationError,
     ParseRunnerGroupNotFoundError,
+    ParseRunnerNetworkBlockedError,
 )
 from server.postparser_web.parse_service import (
     ParseConfigurationError,
@@ -62,6 +63,11 @@ def launch_parse():
         }
     except (ParseRunnerGroupNotFoundError, ParseGroupNotFoundError):
         return _error_response("Группа не найдена", 404)
+    except ParseRunnerNetworkBlockedError:
+        return _error_response(
+            "Parsing for this network is temporarily handled by the legacy service.",
+            409,
+        )
     except (
         ParseRunnerConfigurationError,
         ParseConfigurationError,

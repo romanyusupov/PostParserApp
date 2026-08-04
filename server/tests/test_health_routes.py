@@ -54,6 +54,17 @@ class HealthRoutesTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
 
+    def test_application_health_identifies_service(self):
+        self.app.config["POSTPARSER_SERVICE_NAME"] = "postparser-prod"
+
+        response = self.client.get("/api/v1/health")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.get_json(),
+            {"status": "ok", "service": "postparser-prod"},
+        )
+
     def test_repeated_health_requests_do_not_write_data(self):
         before = self._data_snapshot()
 

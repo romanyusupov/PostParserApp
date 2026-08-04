@@ -1,3 +1,4 @@
+import os
 import pathlib
 
 from flask import Flask
@@ -8,6 +9,7 @@ from server.postparser_web.google_sheets_export import (
     GoogleSheetsExporter,
 )
 from server.postparser_web.health_routes import health_bp
+from server.postparser_web.legacy_proxy import legacy_proxy_bp
 from server.postparser_web.parse_routes import parse_bp
 from server.postparser_web.parse_runner import ParseRunnerService
 from server.postparser_web.parse_service import ParseService
@@ -24,7 +26,22 @@ from server.postparser_web.vk_routes import vk_blueprint
 def create_app(test_config=None):
     app = Flask(__name__)
     app.config.from_mapping(
-        SETTINGS_DATABASE_PATH=get_settings_database_path()
+        SETTINGS_DATABASE_PATH=get_settings_database_path(),
+        LEGACY_PROXY_BASE_URL=os.environ.get(
+            "POSTPARSER_LEGACY_BASE_URL", ""
+        ).strip(),
+        LEGACY_PROXY_TIMEOUT_SECONDS=os.environ.get(
+            "POSTPARSER_LEGACY_TIMEOUT_SECONDS", "310"
+        ).strip(),
+        LEGACY_PROXY_ALLOWED_HOSTS=os.environ.get(
+            "POSTPARSER_LEGACY_ALLOWED_HOSTS", ""
+        ).split(","),
+        LEGACY_OWNED_NETWORKS=os.environ.get(
+            "POSTPARSER_LEGACY_OWNED_NETWORKS", ""
+        ).split(","),
+        POSTPARSER_SERVICE_NAME=os.environ.get(
+            "POSTPARSER_SERVICE_NAME", "postparser-shadow"
+        ).strip(),
     )
 
     if test_config is not None:
@@ -80,11 +97,15 @@ def create_app(test_config=None):
             settings_store,
             parse_service,
             results_store,
+            blocked_networks=app.config.get(
+                "LEGACY_OWNED_NETWORKS", ()
+            ),
         )
         app.extensions["parse_service"] = parse_service
 
     app.extensions["parse_runner"] = parse_runner
     app.register_blueprint(health_bp)
+    app.register_blueprint(legacy_proxy_bp)
     app.register_blueprint(settings_blueprint)
     app.register_blueprint(settings_page_blueprint)
     app.register_blueprint(vk_blueprint)

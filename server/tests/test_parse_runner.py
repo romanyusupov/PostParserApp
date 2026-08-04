@@ -5,6 +5,7 @@ import unittest
 
 from server.postparser_web.parse_runner import (
     ParseRunnerGroupNotFoundError,
+    ParseRunnerNetworkBlockedError,
     ParseRunnerService,
 )
 from server.postparser_web.results_store import ResultsStore
@@ -253,6 +254,36 @@ class ParseRunnerServiceTestCase(unittest.TestCase):
             runner.run_group("missing")
 
         self.assertEqual(self.results_store.create_calls, [])
+
+    def test_legacy_owned_network_is_blocked_before_run_creation(self):
+        for network in ("telegram", "instagram"):
+            with self.subTest(network=network):
+                results_store = RecordingResultsStore()
+                parse_service = FakeParseService()
+                runner = ParseRunnerService(
+                    FakeSettingsStore([make_group(network=network)]),
+                    parse_service,
+                    results_store,
+                    blocked_networks=("telegram", "instagram"),
+                )
+
+                with self.assertRaises(ParseRunnerNetworkBlockedError):
+                    runner.run_group("group_1")
+
+                self.assertEqual(results_store.create_calls, [])
+                self.assertEqual(parse_service.calls, [])
+
+    def test_vk_is_not_blocked_by_legacy_network_policy(self):
+        runner = ParseRunnerService(
+            self.settings_store,
+            self.parse_service,
+            self.results_store,
+            blocked_networks=("telegram", "instagram"),
+        )
+
+        result = runner.run_group("group_1")
+
+        self.assertEqual(result["network"], "vk")
 
     def test_saved_posts_survive_finish_error_and_run_becomes_failed(self):
         with tempfile.TemporaryDirectory() as temporary_directory:

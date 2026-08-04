@@ -13,6 +13,10 @@ class ParseRunnerGroupNotFoundError(ParseRunnerError):
     """Группа с указанным идентификатором отсутствует."""
 
 
+class ParseRunnerNetworkBlockedError(ParseRunnerError):
+    """The network remains owned by the legacy application."""
+
+
 def _required_method(value: Any, method_name: str, description: str) -> None:
     if not callable(getattr(value, method_name, None)):
         raise ParseRunnerConfigurationError(
@@ -68,6 +72,7 @@ class ParseRunnerService:
         settings_store: Any,
         parse_service: Any,
         results_store: Any,
+        blocked_networks=(),
     ):
         _required_method(settings_store, "load", "SettingsStore")
         _required_method(parse_service, "parse_group", "ParseService")
@@ -79,6 +84,11 @@ class ParseRunnerService:
         self._settings_store = settings_store
         self._parse_service = parse_service
         self._results_store = results_store
+        self._blocked_networks = {
+            str(network).strip().casefold()
+            for network in blocked_networks
+            if str(network).strip()
+        }
 
     def _mark_failed(
         self,
@@ -106,6 +116,11 @@ class ParseRunnerService:
             "network",
             "социальную сеть",
         ).casefold()
+        if network in self._blocked_networks:
+            raise ParseRunnerNetworkBlockedError(
+                "Parsing for this network is temporarily handled by "
+                "the legacy application."
+            )
         run_id = self._results_store.create_run(
             normalized_group_id,
             group_name,
