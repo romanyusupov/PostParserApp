@@ -39,10 +39,24 @@ class AccessStore:
                     name TEXT NOT NULL UNIQUE,
                     code_hash TEXT NOT NULL,
                     active INTEGER NOT NULL DEFAULT 1,
+                    deleted INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL
                 )
                 """
             )
+            columns = {
+                row[1]
+                for row in connection.execute(
+                    "PRAGMA table_info(access_users)"
+                ).fetchall()
+            }
+            if "deleted" not in columns:
+                connection.execute(
+                    """
+                    ALTER TABLE access_users
+                    ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0
+                    """
+                )
             connection.commit()
         finally:
             connection.close()
@@ -99,6 +113,7 @@ class AccessStore:
                 """
                 SELECT id, name, active, created_at
                 FROM access_users
+                WHERE deleted = 0
                 ORDER BY id
                 """
             ).fetchall()
@@ -127,7 +142,11 @@ class AccessStore:
         connection = self._connect()
         try:
             cursor = connection.execute(
-                "UPDATE access_users SET active = ? WHERE id = ?",
+                """
+                UPDATE access_users
+                SET active = ?
+                WHERE id = ? AND deleted = 0
+                """,
                 (1 if active else 0, normalized_user_id),
             )
             connection.commit()
@@ -152,6 +171,35 @@ class AccessStore:
             "created_at": row["created_at"],
         }
 
+    def delete_user(self, user_id: Any) -> bool:
+        try:
+            normalized_user_id = int(user_id)
+        except (TypeError, ValueError):
+            return False
+        if normalized_user_id <= 0:
+            return False
+
+        connection = self._connect()
+        try:
+            cursor = connection.execute(
+                """
+                UPDATE access_users
+                SET active = 0, deleted = 1
+                WHERE id = ? AND deleted = 0
+                """,
+                (normalized_user_id,),
+            )
+            exists = cursor.rowcount == 1
+            if not exists:
+                exists = connection.execute(
+                    "SELECT 1 FROM access_users WHERE id = ?",
+                    (normalized_user_id,),
+                ).fetchone() is not None
+            connection.commit()
+        finally:
+            connection.close()
+        return exists
+
     def active_principal(self, owner_id: Any) -> dict[str, str] | None:
         normalized_owner_id = str(owner_id or "").strip()
         if not normalized_owner_id.startswith("user:"):
@@ -167,7 +215,7 @@ class AccessStore:
                 """
                 SELECT id, name
                 FROM access_users
-                WHERE id = ? AND active = 1
+                WHERE id = ? AND active = 1 AND deleted = 0
                 """,
                 (user_id,),
             ).fetchone()
@@ -193,7 +241,7 @@ class AccessStore:
                 """
                 SELECT id, name, code_hash
                 FROM access_users
-                WHERE active = 1
+                WHERE active = 1 AND deleted = 0
                 ORDER BY id
                 """
             ).fetchall()

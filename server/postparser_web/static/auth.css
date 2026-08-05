@@ -44,11 +44,17 @@
 .generated-access-code { padding: 10px 12px; border-radius: 8px; background: #fff; font-size: 18px; letter-spacing: .06em; }
 .access-users { margin-top: 28px; }
 .access-users-list { display: grid; gap: 8px; }
-.access-user { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; border: 1px solid #dbe3ef; border-radius: 10px; background: #fff; font-weight: 700; }
+.access-user { display: grid; grid-template-columns: minmax(150px, .7fr) minmax(360px, 1.5fr) auto; align-items: center; gap: 16px; padding: 14px 16px; border: 1px solid #dbe3ef; border-radius: 10px; background: #fff; font-weight: 700; }
+.access-user-code, .access-user-actions { display: flex; align-items: center; gap: 8px; }
+.access-user-actions { justify-content: flex-end; }
+.access-user-code .generated-access-code { min-width: 210px; box-sizing: border-box; }
+.access-code-issued { color: #64748b; font-size: 14px; font-weight: 500; }
 .access-empty { color: #64748b; }
 
 @media (max-width: 680px) {
   .auth-card { padding: 28px 22px; }
   .app-navigation { grid-template-columns: minmax(0, 1fr); }
   .session-controls { width: 100%; justify-content: space-between; justify-self: stretch; }
+  .access-user { grid-template-columns: minmax(0, 1fr); }
+  .access-user-code, .access-user-actions { flex-wrap: wrap; justify-content: flex-start; }
 }

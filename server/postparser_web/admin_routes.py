@@ -45,3 +45,14 @@ def update_user(user_id):
             {"success": False, "error": "Пользователь не найден."}
         ), 404
     return jsonify({"success": True, "user": user})
+
+
+@admin_bp.delete("/api/v1/admin/users/<int:user_id>")
+@admin_required
+def delete_user(user_id):
+    deleted = current_app.extensions["access_store"].delete_user(user_id)
+    if not deleted:
+        return jsonify(
+            {"success": False, "error": "Пользователь не найден."}
+        ), 404
+    return jsonify({"success": True})

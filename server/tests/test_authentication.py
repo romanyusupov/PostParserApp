@@ -1,5 +1,6 @@
 import os
 import pathlib
+import sqlite3
 import tempfile
 import unittest
 from unittest import mock
@@ -162,11 +163,258 @@ class AuthenticationTestCase(unittest.TestCase):
         self.assertEqual(len(user["access_code"]), 20)
         database_bytes = (self.data_directory / "access.sqlite3").read_bytes()
         self.assertNotIn(user["access_code"].encode("utf-8"), database_bytes)
+        connection = sqlite3.connect(self.data_directory / "access.sqlite3")
+        try:
+            code_hash = connection.execute(
+                "SELECT code_hash FROM access_users WHERE id = ?",
+                (user["id"],),
+            ).fetchone()[0]
+        finally:
+            connection.close()
+        self.assertTrue(code_hash.startswith("scrypt:"))
 
         users_response = self.client.get("/api/v1/admin/users")
         stored_user = users_response.get_json()["users"][0]
         self.assertNotIn("access_code", stored_user)
         self.assertNotIn("code_hash", stored_user)
+
+    def test_admin_can_delete_user_and_identifier_is_not_reused(self):
+        self._login(ADMIN_PASSWORD)
+        created = self.client.post(
+            "/api/v1/admin/users",
+            json={},
+            headers=self._csrf_headers(),
+        ).get_json()["user"]
+
+        deleted = self.client.delete(
+            f"/api/v1/admin/users/{created['id']}",
+            headers=self._csrf_headers(),
+        )
+
+        self.assertEqual(deleted.status_code, 200)
+        self.assertEqual(
+            self.client.get("/api/v1/admin/users").get_json()["users"],
+            [],
+        )
+        self.client.post(
+            "/logout",
+            data={"csrf_token": self._csrf_headers()["X-CSRF-Token"]},
+        )
+        self.assertEqual(self._login(created["access_code"]).status_code, 401)
+        self._login(ADMIN_PASSWORD)
+        replacement = self.client.post(
+            "/api/v1/admin/users",
+            json={},
+            headers=self._csrf_headers(),
+        ).get_json()["user"]
+        self.assertEqual(replacement["id"], created["id"] + 1)
+        self.assertEqual(replacement["name"], "Пользователь 2")
+
+    def test_admin_cannot_delete_admin_and_delete_requires_csrf(self):
+        self._login(ADMIN_PASSWORD)
+        created = self.client.post(
+            "/api/v1/admin/users",
+            json={},
+            headers=self._csrf_headers(),
+        ).get_json()["user"]
+
+        without_csrf = self.client.delete(
+            f"/api/v1/admin/users/{created['id']}"
+        )
+        admin_identifier = self.client.delete(
+            "/api/v1/admin/users/0",
+            headers=self._csrf_headers(),
+        )
+
+        self.assertEqual(without_csrf.status_code, 403)
+        self.assertEqual(admin_identifier.status_code, 404)
+        self.assertEqual(self.client.get("/admin/access").status_code, 200)
+        self.assertIsNotNone(
+            self.app.extensions["access_store"].active_principal(
+                created["owner_id"]
+            )
+        )
+
+    def test_delete_is_idempotent_and_revokes_active_session(self):
+        self._login(ADMIN_PASSWORD)
+        created = self.client.post(
+            "/api/v1/admin/users",
+            json={},
+            headers=self._csrf_headers(),
+        ).get_json()["user"]
+        user_client = self.app.test_client()
+        user_client.get("/")
+        with user_client.session_transaction() as browser_session:
+            login_csrf = browser_session["csrf_token"]
+        self.assertEqual(
+            user_client.post(
+                "/login",
+                data={
+                    "access_code": created["access_code"],
+                    "csrf_token": login_csrf,
+                },
+            ).status_code,
+            302,
+        )
+
+        first = self.client.delete(
+            f"/api/v1/admin/users/{created['id']}",
+            headers=self._csrf_headers(),
+        )
+        second = self.client.delete(
+            f"/api/v1/admin/users/{created['id']}",
+            headers=self._csrf_headers(),
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(user_client.get("/api/v1/settings").status_code, 401)
+
+    def test_user_cannot_delete_another_user_or_admin(self):
+        first = self.app.extensions["access_store"].create_user()
+        second = self.app.extensions["access_store"].create_user()
+        self._login(first["access_code"])
+
+        response = self.client.delete(
+            f"/api/v1/admin/users/{second['id']}",
+            headers=self._csrf_headers(),
+        )
+        admin_like_response = self.client.delete(
+            "/api/v1/admin/users/0",
+            headers=self._csrf_headers(),
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(admin_like_response.status_code, 403)
+        self.assertIsNotNone(
+            self.app.extensions["access_store"].active_principal(
+                second["owner_id"]
+            )
+        )
+
+    def test_deleting_user_preserves_owned_data_and_other_users(self):
+        access_store = self.app.extensions["access_store"]
+        settings_store = self.app.extensions["settings_store"]
+        results_store = self.app.extensions["results_store"]
+        deleted_user = access_store.create_user()
+        other_user = access_store.create_user()
+        settings_store.save(
+            {
+                "groups": [valid_group("deleted-group", "Deleted owner")],
+                "savedAt": "",
+            },
+            0,
+            owner_id=deleted_user["owner_id"],
+        )
+        deleted_run = results_store.create_run(
+            "deleted-group",
+            "Deleted owner",
+            "vk",
+            owner_id=deleted_user["owner_id"],
+        )
+        settings_store.save(
+            {
+                "groups": [valid_group("other-group", "Other owner")],
+                "savedAt": "",
+            },
+            0,
+            owner_id=other_user["owner_id"],
+        )
+
+        self.assertTrue(access_store.delete_user(deleted_user["id"]))
+
+        deleted_settings = settings_store.load(
+            owner_id=deleted_user["owner_id"]
+        )
+        deleted_runs = results_store.list_runs(
+            owner_id=deleted_user["owner_id"]
+        )
+        self.assertEqual(
+            deleted_settings["settings"]["groups"][0]["id"],
+            "deleted-group",
+        )
+        self.assertEqual(deleted_runs[0]["id"], deleted_run)
+        self.assertIsNotNone(access_store.active_principal(other_user["owner_id"]))
+        self.assertEqual(
+            settings_store.load(owner_id=other_user["owner_id"])["settings"][
+                "groups"
+            ][0]["id"],
+            "other-group",
+        )
+
+        replacement = access_store.create_user()
+        self.assertNotEqual(replacement["owner_id"], deleted_user["owner_id"])
+        self.assertEqual(
+            settings_store.load(owner_id=replacement["owner_id"])["settings"][
+                "groups"
+            ],
+            [],
+        )
+
+    def test_access_database_adds_deleted_column_idempotently(self):
+        legacy_path = self.data_directory / "legacy-access.sqlite3"
+        connection = sqlite3.connect(legacy_path)
+        try:
+            connection.execute(
+                """
+                CREATE TABLE access_users (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE,
+                    code_hash TEXT NOT NULL,
+                    active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        from server.postparser_web.access_store import AccessStore
+
+        AccessStore(legacy_path)
+        AccessStore(legacy_path)
+        connection = sqlite3.connect(legacy_path)
+        try:
+            columns = [
+                row[1]
+                for row in connection.execute(
+                    "PRAGMA table_info(access_users)"
+                ).fetchall()
+            ]
+        finally:
+            connection.close()
+        self.assertEqual(columns.count("deleted"), 1)
+
+    def test_admin_ui_hides_new_code_until_reveal_in_same_row(self):
+        script = (
+            pathlib.Path(__file__).parents[1]
+            / "postparser_web"
+            / "static"
+            / "admin_access.js"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('oneTimeCodes.set(payload.user.id', script)
+        self.assertIn('"••••••••••••••••••••"', script)
+        self.assertIn('"Показать код"', script)
+        self.assertIn('"Скрыть код"', script)
+        self.assertIn("row.append(name, codeCell, actions)", script)
+        self.assertNotIn("innerHTML", script)
+
+    def test_access_code_cannot_be_recovered_after_page_reload(self):
+        self._login(ADMIN_PASSWORD)
+        created = self.client.post(
+            "/api/v1/admin/users",
+            json={},
+            headers=self._csrf_headers(),
+        ).get_json()["user"]
+
+        users_payload = self.client.get("/api/v1/admin/users").get_json()
+        reloaded_page = self.client.get("/admin/access").get_data(as_text=True)
+
+        self.assertNotIn("access_code", users_payload["users"][0])
+        self.assertNotIn("code_hash", users_payload["users"][0])
+        self.assertNotIn(created["access_code"], reloaded_page)
 
     def test_user_starts_empty_and_cannot_open_admin_panel(self):
         user = self.app.extensions["access_store"].create_user()
