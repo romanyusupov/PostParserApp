@@ -3,6 +3,11 @@ import urllib.parse
 
 from flask import Blueprint, current_app, jsonify
 
+from server.postparser_web.authentication import (
+    current_owner_id,
+    current_user_name,
+)
+
 from server.postparser_web.google_sheets_export import (
     GoogleSheetsConfigurationError,
     GoogleSheetsExportError,
@@ -63,7 +68,11 @@ def export_run_to_google_sheets(run_id):
                 "Экспорт Google Sheets не настроен."
             )
 
-        result = exporter.export_run(run_id)
+        result = exporter.export_run(
+            run_id,
+            owner_id=current_owner_id(),
+            owner_name=current_user_name(),
+        )
         url = _export_url(result)
     except GoogleSheetsConfigurationError:
         return _error_response(

@@ -3,11 +3,14 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>Настройки парсера</title>
     <link
       rel="stylesheet"
       href="{{ url_for('static', filename='settings.css') }}"
     >
+    <link rel="stylesheet" href="{{ url_for('static', filename='auth.css') }}">
+    <script src="{{ url_for('static', filename='csrf.js') }}" defer></script>
     <script
       src="{{ url_for('static', filename='app_tabs.js') }}"
       defer

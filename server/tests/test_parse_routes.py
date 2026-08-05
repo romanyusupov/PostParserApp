@@ -24,7 +24,7 @@ class MockRunner:
             "posts": [{"external_id": "must-not-be-returned"}],
         }
 
-    def run_group(self, group_id):
+    def run_group(self, group_id, owner_id="admin"):
         self.calls.append(group_id)
         if self.error is not None:
             raise self.error

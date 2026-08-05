@@ -161,11 +161,12 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
         os.chmod(self.credentials_path, 0o600)
         self.client = MockClient()
 
-    def create_run(self, group_name=GROUP_NAME, posts=None):
+    def create_run(self, group_name=GROUP_NAME, posts=None, owner_id="admin"):
         run_id = self.results_store.create_run(
             "group_1",
             group_name,
             "vk",
+            owner_id=owner_id,
         )
         self.results_store.save_posts(run_id, posts or [])
         self.results_store.finish_run(run_id, len(posts or []))
@@ -399,6 +400,38 @@ class GoogleSheetsExporterTestCase(unittest.TestCase):
         result = self.create_exporter().export_run(run_id)
 
         self.assertEqual(len(result["sheet_name"]), 100)
+
+    def test_user_sheet_name_is_prefixed_to_avoid_collisions(self):
+        run_id = self.create_run(
+            group_name="Общая группа",
+            owner_id="user:1",
+        )
+
+        result = self.create_exporter().export_run(
+            run_id,
+            owner_id="user:1",
+            owner_name="Пользователь 1",
+        )
+
+        self.assertEqual(
+            result["sheet_name"],
+            "Пользователь 1 · Общая группа",
+        )
+
+    def test_user_cannot_export_another_owners_run(self):
+        admin_run = self.create_run(posts=[make_post()])
+
+        with self.assertRaisesRegex(
+            GoogleSheetsExportError,
+            "Запуск не найден",
+        ):
+            self.create_exporter().export_run(
+                admin_run,
+                owner_id="user:1",
+                owner_name="Пользователь 1",
+            )
+
+        self.assertEqual(self.client.operations, [])
 
     def test_client_error_becomes_safe_export_error(self):
         client = MockClient(error=RuntimeError("Google client failed"))

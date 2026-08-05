@@ -2,6 +2,10 @@ import pathlib
 
 from flask import Flask
 
+from server.postparser_web.access_store import AccessStore
+from server.postparser_web.admin_routes import admin_bp
+from server.postparser_web.auth_routes import auth_bp
+from server.postparser_web.authentication import install_authentication
 from server.postparser_web.config import get_settings_database_path
 from server.postparser_web.google_sheets_export import (
     GoogleSheetsConfigurationError,
@@ -36,10 +40,26 @@ def create_app(test_config=None):
     if test_config is not None:
         app.config.update(test_config)
 
+    app.config.setdefault(
+        "AUTHENTICATION_DISABLED",
+        bool(app.config.get("TESTING")),
+    )
+
     settings_store = SettingsStore(
         app.config["SETTINGS_DATABASE_PATH"]
     )
     app.extensions["settings_store"] = settings_store
+
+    access_database_path = app.config.get("ACCESS_DATABASE_PATH")
+    if access_database_path is None:
+        access_database_path = pathlib.Path(
+            app.config["SETTINGS_DATABASE_PATH"]
+        ).with_name("access.sqlite3")
+    access_store = app.config.get("ACCESS_STORE")
+    if access_store is None:
+        access_store = AccessStore(access_database_path)
+    app.extensions["access_store"] = access_store
+    install_authentication(app)
 
     results_store = app.config.get("RESULTS_STORE")
     if results_store is None:
@@ -106,6 +126,8 @@ def create_app(test_config=None):
         app.extensions["parse_service"] = parse_service
 
     app.extensions["parse_runner"] = parse_runner
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(admin_bp)
     app.register_blueprint(health_bp)
     app.register_blueprint(instagram_oauth_bp)
     app.register_blueprint(media_bp)

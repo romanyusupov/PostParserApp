@@ -12,18 +12,23 @@ from server.postparser_web.results_store import ResultsStore
 
 
 class UnusedRunner:
-    def run_group(self, group_id):
+    def run_group(self, group_id, owner_id="admin"):
         raise AssertionError("Парсеры не должны запускаться в этих тестах")
 
 
 class BrokenResultsStore:
-    def list_runs(self, limit=50):
+    def list_runs(self, limit=50, owner_id="admin"):
         raise RuntimeError("private database details")
 
-    def get_run(self, run_id):
+    def get_run(self, run_id, owner_id="admin"):
         raise RuntimeError("private database details")
 
-    def get_posts(self, group_id=None, network=None):
+    def get_posts(
+        self,
+        group_id=None,
+        network=None,
+        owner_id="admin",
+    ):
         raise RuntimeError("private database details")
 
 
@@ -32,7 +37,12 @@ class MockExporter:
         self.error = error
         self.run_ids = []
 
-    def export_run(self, run_id):
+    def export_run(
+        self,
+        run_id,
+        owner_id="admin",
+        owner_name="",
+    ):
         self.run_ids.append(run_id)
         if self.error is not None:
             raise self.error
@@ -393,6 +403,7 @@ class ResultsPageTestCase(unittest.TestCase):
         self.assertIn('header.setAttribute("aria-sort", direction);', script)
         self.assertIn('direction === "descending"', script)
         self.assertIn('direction === "ascending"', script)
+        self.assertIn(': "↓↑";', script)
         self.assertIn('button.addEventListener("click"', script)
 
     def test_unavailable_metrics_are_not_rendered_as_zero(self):

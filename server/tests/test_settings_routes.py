@@ -45,7 +45,7 @@ def make_settings(groups=None):
 
 
 class BrokenSettingsStore:
-    def load(self):
+    def load(self, owner_id="admin"):
         raise RuntimeError("внутренний текст ошибки хранилища")
 
 

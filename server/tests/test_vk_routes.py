@@ -68,7 +68,7 @@ class FakeVkParser:
 
 
 class BrokenSettingsStore:
-    def load(self):
+    def load(self, owner_id="admin"):
         raise RuntimeError("секретный текст ошибки хранилища")
 
 

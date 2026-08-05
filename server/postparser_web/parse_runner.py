@@ -22,9 +22,13 @@ def _required_method(value: Any, method_name: str, description: str) -> None:
         )
 
 
-def _load_group(settings_store: Any, group_id: str) -> dict[str, Any]:
+def _load_group(
+    settings_store: Any,
+    group_id: str,
+    owner_id: str,
+) -> dict[str, Any]:
     try:
-        stored_document = settings_store.load()
+        stored_document = settings_store.load(owner_id=owner_id)
     except Exception:
         raise ParseRunnerError(
             "Не удалось загрузить настройки парсеров."
@@ -98,12 +102,24 @@ class ParseRunnerService:
                 "перевести в состояние failed."
             ) from original_error
 
-    def run_group(self, group_id: Any) -> dict[str, Any]:
+    def run_group(
+        self,
+        group_id: Any,
+        owner_id: Any = "admin",
+    ) -> dict[str, Any]:
         normalized_group_id = str(group_id or "").strip()
         if not normalized_group_id:
             raise ParseRunnerError("Идентификатор группы не указан.")
 
-        group = _load_group(self._settings_store, normalized_group_id)
+        normalized_owner_id = str(owner_id or "").strip()
+        if not normalized_owner_id:
+            raise ParseRunnerError("Идентификатор владельца не указан.")
+
+        group = _load_group(
+            self._settings_store,
+            normalized_group_id,
+            normalized_owner_id,
+        )
         group_name = _group_string(group, "name", "название")
         network = _group_string(
             group,
@@ -114,12 +130,14 @@ class ParseRunnerService:
             normalized_group_id,
             group_name,
             network,
+            owner_id=normalized_owner_id,
         )
         saved_count = 0
 
         try:
             parse_result = self._parse_service.parse_group(
-                normalized_group_id
+                normalized_group_id,
+                owner_id=normalized_owner_id,
             )
             if not isinstance(parse_result, dict):
                 raise ParseRunnerError(
@@ -148,6 +166,7 @@ class ParseRunnerService:
             cleanup_after_success(
                 self._storage_retention,
                 normalized_group_id,
+                normalized_owner_id,
             )
 
         result = {

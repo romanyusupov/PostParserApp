@@ -7,15 +7,15 @@ from server.postparser_web.results_store import ResultsStore
 
 
 class UnusedRunner:
-    def run_group(self, group_id):
+    def run_group(self, group_id, owner_id="admin"):
         raise AssertionError("Реальный запуск парсинга запрещён в этих тестах")
 
 
 class BrokenResultsStore:
-    def get_run(self, run_id):
+    def get_run(self, run_id, owner_id="admin"):
         raise RuntimeError("private database details")
 
-    def list_runs(self, limit=50):
+    def list_runs(self, limit=50, owner_id="admin"):
         raise RuntimeError("private database details")
 
 

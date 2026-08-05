@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Вход в PostParser</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='auth.css') }}">
+  </head>
+  <body class="auth-page">
+    <main class="auth-card">
+      <div class="auth-eyebrow">PostParser</div>
+      <h1>Добро пожаловать в сервис аналитики публикаций в социальных сетях</h1>
+      <form class="auth-form" action="/login" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label for="accessCode">Введите ваш код доступа</label>
+        <input
+          id="accessCode"
+          name="access_code"
+          type="password"
+          autocomplete="current-password"
+          required
+          autofocus
+        >
+        {% if login_error %}
+        <p class="auth-error" role="alert">{{ login_error }}</p>
+        {% endif %}
+        <button type="submit">Войти</button>
+      </form>
+    </main>
+  </body>
+</html>

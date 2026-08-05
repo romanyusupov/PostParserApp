@@ -51,7 +51,14 @@ class SettingsStore:
         finally:
             connection.close()
 
-    def load(self):
+    def _document_key(self, owner_id):
+        normalized_owner_id = str(owner_id or "admin").strip()
+        if normalized_owner_id == "admin":
+            return self.DOCUMENT_KEY
+        return f"{self.DOCUMENT_KEY}:{normalized_owner_id}"
+
+    def load(self, owner_id="admin"):
+        document_key = self._document_key(owner_id)
         connection = self._connect()
         try:
             row = connection.execute(
@@ -60,7 +67,7 @@ class SettingsStore:
                 FROM settings_documents
                 WHERE key = ?
                 """,
-                (self.DOCUMENT_KEY,),
+                (document_key,),
             ).fetchone()
         finally:
             connection.close()
@@ -80,7 +87,8 @@ class SettingsStore:
             "settings": json.loads(payload_json),
         }
 
-    def save(self, settings, expected_revision):
+    def save(self, settings, expected_revision, owner_id="admin"):
+        document_key = self._document_key(owner_id)
         payload_json = json.dumps(
             settings,
             ensure_ascii=False,
@@ -99,7 +107,7 @@ class SettingsStore:
                 FROM settings_documents
                 WHERE key = ?
                 """,
-                (self.DOCUMENT_KEY,),
+                (document_key,),
             ).fetchone()
 
             current_revision = row[0] if row is not None else 0
@@ -126,7 +134,7 @@ class SettingsStore:
                     VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (
-                        self.DOCUMENT_KEY,
+                        document_key,
                         self.SCHEMA_VERSION,
                         new_revision,
                         payload_json,
@@ -149,7 +157,7 @@ class SettingsStore:
                         new_revision,
                         payload_json,
                         timestamp,
-                        self.DOCUMENT_KEY,
+                        document_key,
                     ),
                 )
             connection.commit()

@@ -2,6 +2,8 @@ import datetime
 
 from flask import Blueprint, current_app, jsonify, request
 
+from server.postparser_web.authentication import current_owner_id
+
 from server.postparser_web.settings_schema import (
     SettingsValidationError,
     prepare_settings,
@@ -39,7 +41,7 @@ def get_settings():
     try:
         stored_document = current_app.extensions[
             "settings_store"
-        ].load()
+        ].load(owner_id=current_owner_id())
     except Exception:
         current_app.logger.exception(
             "Не удалось загрузить настройки."
@@ -100,6 +102,7 @@ def put_settings():
         ].save(
             prepared_settings,
             expected_revision=revision,
+            owner_id=current_owner_id(),
         )
     except SettingsValidationError as error:
         return jsonify(

@@ -74,10 +74,15 @@ class StorageRetentionService:
 
         return deleted_count
 
-    def cleanup_group(self, group_id: Any) -> dict[str, int]:
+    def cleanup_group(
+        self,
+        group_id: Any,
+        owner_id: Any = "admin",
+    ) -> dict[str, int]:
         deleted_runs = self._results_store.prune_group_runs(
             group_id,
             self._runs_per_group,
+            owner_id,
         )
         deleted_media = self.remove_unreferenced_media()
         return {
@@ -110,9 +115,13 @@ def register_storage_maintenance_command(app) -> None:
         )
 
 
-def cleanup_after_success(retention: Any, group_id: str) -> None:
+def cleanup_after_success(
+    retention: Any,
+    group_id: str,
+    owner_id: str = "admin",
+) -> None:
     try:
-        result = retention.cleanup_group(group_id)
+        result = retention.cleanup_group(group_id, owner_id)
     except Exception:
         LOGGER.exception(
             "Storage retention failed after a successful parser run."

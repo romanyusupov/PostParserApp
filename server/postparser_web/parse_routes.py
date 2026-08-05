@@ -1,5 +1,7 @@
 from flask import Blueprint, current_app, jsonify, request
 
+from server.postparser_web.authentication import current_owner_id
+
 from server.postparser_web.instagram_parser import (
     InstagramConfigurationError,
     InstagramParserError,
@@ -49,7 +51,8 @@ def launch_parse():
 
     try:
         result = current_app.extensions["parse_runner"].run_group(
-            group_id.strip()
+            group_id.strip(),
+            owner_id=current_owner_id(),
         )
         response_payload = {
             "success": True,

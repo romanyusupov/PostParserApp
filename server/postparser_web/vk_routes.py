@@ -2,6 +2,8 @@ import os
 
 from flask import Blueprint, current_app, jsonify, request
 
+from server.postparser_web.authentication import current_owner_id
+
 from server.postparser_web.vk_parser import (
     VkApiError,
     VkConfigurationError,
@@ -118,7 +120,7 @@ def parse_vk_group():
     try:
         stored_document = current_app.extensions[
             "settings_store"
-        ].load()
+        ].load(owner_id=current_owner_id())
     except Exception as error:
         _log_internal_error(error)
         return _error_response(

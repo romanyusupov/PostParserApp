@@ -139,6 +139,7 @@ class ResultsStore:
                 """
                 CREATE TABLE IF NOT EXISTS parse_runs (
                     id INTEGER PRIMARY KEY,
+                    owner_id TEXT NOT NULL DEFAULT 'admin',
                     group_id TEXT NOT NULL,
                     group_name TEXT NOT NULL,
                     network TEXT NOT NULL,
@@ -177,6 +178,13 @@ class ResultsStore:
                     """
                     ALTER TABLE parse_runs
                     ADD COLUMN warning TEXT NOT NULL DEFAULT ''
+                    """
+                )
+            if "owner_id" not in run_columns:
+                connection.execute(
+                    """
+                    ALTER TABLE parse_runs
+                    ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'admin'
                     """
                 )
             connection.execute(
@@ -234,6 +242,12 @@ class ResultsStore:
             )
             connection.execute(
                 """
+                CREATE INDEX IF NOT EXISTS idx_parse_runs_owner_group_network
+                ON parse_runs (owner_id, group_id, network)
+                """
+            )
+            connection.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_posts_published_at
                 ON posts (published_at)
                 """
@@ -250,6 +264,7 @@ class ResultsStore:
         group_id: Any,
         group_name: Any,
         network: Any,
+        owner_id: Any = "admin",
     ) -> int:
         connection = self._connect()
         try:
@@ -257,6 +272,7 @@ class ResultsStore:
             cursor = connection.execute(
                 """
                 INSERT INTO parse_runs (
+                    owner_id,
                     group_id,
                     group_name,
                     network,
@@ -265,9 +281,10 @@ class ResultsStore:
                     finished_at,
                     count
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
+                    _safe_text(owner_id),
                     _safe_text(group_id),
                     _safe_text(group_name),
                     _safe_text(network),
@@ -355,7 +372,11 @@ class ResultsStore:
             FAILED_STATUS,
         )
 
-    def get_run(self, run_id: Any) -> dict[str, Any] | None:
+    def get_run(
+        self,
+        run_id: Any,
+        owner_id: Any = "admin",
+    ) -> dict[str, Any] | None:
         normalized_run_id = _positive_run_id(run_id)
         connection = self._connect()
         try:
@@ -363,6 +384,7 @@ class ResultsStore:
                 """
                 SELECT
                     id,
+                    owner_id,
                     group_id,
                     group_name,
                     network,
@@ -372,16 +394,20 @@ class ResultsStore:
                     count,
                     warning
                 FROM parse_runs
-                WHERE id = ?
+                WHERE id = ? AND owner_id = ?
                 """,
-                (normalized_run_id,),
+                (normalized_run_id, _safe_text(owner_id)),
             ).fetchone()
         finally:
             connection.close()
 
         return dict(row) if row is not None else None
 
-    def list_runs(self, limit: Any = 50) -> list[dict[str, Any]]:
+    def list_runs(
+        self,
+        limit: Any = 50,
+        owner_id: Any = "admin",
+    ) -> list[dict[str, Any]]:
         if isinstance(limit, bool):
             raise ResultsStoreError(
                 "Лимит запусков должен быть положительным числом."
@@ -406,6 +432,7 @@ class ResultsStore:
                 """
                 SELECT
                     id,
+                    owner_id,
                     group_id,
                     group_name,
                     network,
@@ -415,17 +442,23 @@ class ResultsStore:
                     count,
                     warning
                 FROM parse_runs
+                WHERE owner_id = ?
                 ORDER BY id DESC
                 LIMIT ?
                 """,
-                (normalized_limit,),
+                (_safe_text(owner_id), normalized_limit),
             ).fetchall()
         finally:
             connection.close()
 
         return [dict(row) for row in rows]
 
-    def prune_group_runs(self, group_id: Any, keep: Any = 3) -> int:
+    def prune_group_runs(
+        self,
+        group_id: Any,
+        keep: Any = 3,
+        owner_id: Any = "admin",
+    ) -> int:
         normalized_group_id = _safe_text(group_id).strip()
         if not normalized_group_id:
             raise ResultsStoreError(
@@ -454,19 +487,24 @@ class ResultsStore:
                 """
                 SELECT id
                 FROM parse_runs
-                WHERE group_id = ?
+                WHERE owner_id = ? AND group_id = ?
                 ORDER BY id DESC
                 LIMIT ?
                 """,
-                (normalized_group_id, normalized_keep),
+                (
+                    _safe_text(owner_id),
+                    normalized_group_id,
+                    normalized_keep,
+                ),
             ).fetchall()
             retained_ids = [int(row["id"]) for row in retained_rows]
             placeholders = ", ".join("?" for _ in retained_ids)
             query = (
                 "DELETE FROM parse_runs "
-                "WHERE group_id = ? AND status != ?"
+                "WHERE owner_id = ? AND group_id = ? AND status != ?"
             )
             parameters: list[Any] = [
+                _safe_text(owner_id),
                 normalized_group_id,
                 RUNNING_STATUS,
             ]
@@ -486,18 +524,18 @@ class ResultsStore:
     def prune_all_group_runs(self, keep: Any = 3) -> int:
         connection = self._connect()
         try:
-            group_ids = [
-                row["group_id"]
+            owner_groups = [
+                (row["owner_id"], row["group_id"])
                 for row in connection.execute(
-                    "SELECT DISTINCT group_id FROM parse_runs"
+                    "SELECT DISTINCT owner_id, group_id FROM parse_runs"
                 ).fetchall()
             ]
         finally:
             connection.close()
 
         return sum(
-            self.prune_group_runs(group_id, keep)
-            for group_id in group_ids
+            self.prune_group_runs(group_id, keep, owner_id)
+            for owner_id, group_id in owner_groups
         )
 
     def list_image_urls(self) -> set[str]:
@@ -589,9 +627,10 @@ class ResultsStore:
         self,
         group_id: Any = None,
         network: Any = None,
+        owner_id: Any = "admin",
     ) -> list[dict[str, Any]]:
-        conditions = []
-        parameters = []
+        conditions = ["runs.owner_id = ?"]
+        parameters = [_safe_text(owner_id)]
 
         if group_id is not None:
             conditions.append("runs.group_id = ?")
@@ -612,6 +651,7 @@ class ResultsStore:
                 posts.id,
                 posts.run_id,
                 runs.group_id,
+                runs.owner_id,
                 runs.group_name,
                 runs.network,
                 posts.source,

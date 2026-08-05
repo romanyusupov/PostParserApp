@@ -1,5 +1,7 @@
 from flask import Blueprint, current_app, jsonify, render_template
 
+from server.postparser_web.authentication import current_owner_id
+
 
 results_bp = Blueprint("results", __name__)
 
@@ -25,7 +27,8 @@ def results_page():
 def list_result_runs():
     try:
         runs = current_app.extensions["results_store"].list_runs(
-            limit=50
+            limit=50,
+            owner_id=current_owner_id(),
         )
     except Exception:
         current_app.logger.exception(
@@ -46,7 +49,8 @@ def list_run_posts(run_id):
     results_store = current_app.extensions["results_store"]
 
     try:
-        run = results_store.get_run(run_id)
+        owner_id = current_owner_id()
+        run = results_store.get_run(run_id, owner_id=owner_id)
         if run is None:
             return jsonify(
                 {
@@ -58,6 +62,7 @@ def list_run_posts(run_id):
         posts = results_store.get_posts(
             group_id=run["group_id"],
             network=run["network"],
+            owner_id=owner_id,
         )
         run_posts = [
             post

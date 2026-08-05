@@ -7,6 +7,8 @@ from typing import Any
 
 from flask import Blueprint, current_app, jsonify, redirect, request
 
+from server.postparser_web.authentication import admin_required
+
 from server.postparser_web.instagram_token_store import (
     InstagramTokenStorageError,
     save_instagram_access_token,
@@ -108,6 +110,7 @@ def _safe_error_response(message: str, status_code: int):
 
 
 @instagram_oauth_bp.get("/instagram/connect")
+@admin_required
 def instagram_connect():
     try:
         configuration = _oauth_configuration()

@@ -48,7 +48,7 @@ class FakeSettingsStore:
         self.groups = groups
         self.calls = []
 
-    def load(self):
+    def load(self, owner_id="admin"):
         self.calls.append("load")
         return {
             "revision": 1,
@@ -69,8 +69,8 @@ class FakeParseService:
         self.calls = []
         self.events = events
 
-    def parse_group(self, group_id):
-        self.calls.append(group_id)
+    def parse_group(self, group_id, owner_id="admin"):
+        self.calls.append((group_id, owner_id))
         if self.events is not None:
             self.events.append("parse_group")
         if self.error is not None:
@@ -90,9 +90,15 @@ class RecordingResultsStore:
         if self.events is not None:
             self.events.append(name)
 
-    def create_run(self, group_id, group_name, network):
+    def create_run(
+        self,
+        group_id,
+        group_name,
+        network,
+        owner_id="admin",
+    ):
         self._event("create_run")
-        self.create_calls.append((group_id, group_name, network))
+        self.create_calls.append((group_id, group_name, network, owner_id))
         return 42
 
     def save_posts(self, run_id, posts):
@@ -119,8 +125,8 @@ class FakeStorageRetention:
         self.error = error
         self.calls = []
 
-    def cleanup_group(self, group_id):
-        self.calls.append(group_id)
+    def cleanup_group(self, group_id, owner_id="admin"):
+        self.calls.append((group_id, owner_id))
         if self.error is not None:
             raise self.error
         return {"deleted_runs": 0, "deleted_media": 0}
@@ -158,7 +164,7 @@ class ParseRunnerServiceTestCase(unittest.TestCase):
 
         self.assertEqual(
             self.results_store.create_calls,
-            [("group_1", "Тестовая группа", "vk")],
+            [("group_1", "Тестовая группа", "vk", "admin")],
         )
 
     def test_posts_are_saved_for_created_run(self):
@@ -201,7 +207,7 @@ class ParseRunnerServiceTestCase(unittest.TestCase):
 
         runner.run_group("group_1")
 
-        self.assertEqual(retention.calls, ["group_1"])
+        self.assertEqual(retention.calls, [("group_1", "admin")])
 
     def test_storage_retention_error_does_not_fail_completed_run(self):
         retention = FakeStorageRetention(RuntimeError("cleanup failed"))

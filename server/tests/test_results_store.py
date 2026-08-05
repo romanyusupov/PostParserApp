@@ -130,6 +130,7 @@ class ResultsStoreTestCase(unittest.TestCase):
             run,
             {
                 "id": run_id,
+                "owner_id": "admin",
                 "group_id": "group_1",
                 "group_name": "Группа",
                 "network": "vk",
@@ -141,6 +142,33 @@ class ResultsStoreTestCase(unittest.TestCase):
             },
         )
         self.assertIsNone(self.store.get_run(run_id + 1000))
+
+    def test_runs_and_posts_are_isolated_by_owner(self):
+        admin_run = self.store.create_run(
+            "same_group", "Admin group", "vk", owner_id="admin"
+        )
+        user_run = self.store.create_run(
+            "same_group", "User group", "vk", owner_id="user:1"
+        )
+        self.store.save_posts(admin_run, [make_post("vk", "admin_post")])
+        self.store.save_posts(user_run, [make_post("vk", "user_post")])
+
+        self.assertEqual(
+            [run["id"] for run in self.store.list_runs(owner_id="admin")],
+            [admin_run],
+        )
+        self.assertEqual(
+            [run["id"] for run in self.store.list_runs(owner_id="user:1")],
+            [user_run],
+        )
+        self.assertIsNone(self.store.get_run(admin_run, owner_id="user:1"))
+        self.assertEqual(
+            [
+                post["external_id"]
+                for post in self.store.get_posts(owner_id="user:1")
+            ],
+            ["user_post"],
+        )
 
     def test_list_runs_is_newest_first_and_limited_to_fifty(self):
         run_ids = [
@@ -287,6 +315,9 @@ class ResultsStoreTestCase(unittest.TestCase):
             statuses = connection.execute(
                 "SELECT group_id, status FROM parse_runs ORDER BY id"
             ).fetchall()
+            owners = connection.execute(
+                "SELECT DISTINCT owner_id FROM parse_runs"
+            ).fetchall()
             run_columns = {
                 row[1]
                 for row in connection.execute(
@@ -301,6 +332,8 @@ class ResultsStoreTestCase(unittest.TestCase):
             [("running", "running"), ("done", "completed")],
         )
         self.assertIn("warning", run_columns)
+        self.assertIn("owner_id", run_columns)
+        self.assertEqual(owners, [("admin",)])
 
     def test_posts_are_saved(self):
         run_id = self.store.create_run("group_1", "Группа", "vk")

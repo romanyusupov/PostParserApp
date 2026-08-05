@@ -78,8 +78,14 @@ def _image_formula(value: Any) -> str:
     return f'=IMAGE("{escaped_url}")'
 
 
-def build_sheet_name(run: dict[str, Any]) -> str:
+def build_sheet_name(
+    run: dict[str, Any],
+    owner_name: Any = "",
+) -> str:
     raw_name = _safe_text(run.get("group_name")).strip() or "Группа"
+    normalized_owner_name = _safe_text(owner_name).strip()
+    if normalized_owner_name and normalized_owner_name != "Администратор":
+        raw_name = f"{normalized_owner_name} · {raw_name}"
     safe_name = re.sub(r"[\[\]:*?/\\]", " ", raw_name)
     safe_name = " ".join(safe_name.split()).strip("'")
     return (safe_name or "Группа")[:MAX_SHEET_NAME_LENGTH]
@@ -354,11 +360,19 @@ class GoogleSheetsExporter:
         rows.extend(build_export_row(post) for post in posts)
         return rows
 
-    def export_run(self, run_id: Any) -> dict[str, Any]:
+    def export_run(
+        self,
+        run_id: Any,
+        owner_id: Any = "admin",
+        owner_name: Any = "",
+    ) -> dict[str, Any]:
         self._validate_dependencies()
 
         try:
-            run = self._results_store.get_run(run_id)
+            run = self._results_store.get_run(
+                run_id,
+                owner_id=owner_id,
+            )
         except Exception:
             LOGGER.error("Не удалось прочитать результаты для экспорта.")
             raise GoogleSheetsExportError(
@@ -372,13 +386,14 @@ class GoogleSheetsExporter:
             posts = self._results_store.get_posts(
                 group_id=run["group_id"],
                 network=run["network"],
+                owner_id=owner_id,
             )
             run_posts = [
                 post
                 for post in posts
                 if post.get("run_id") == run["id"]
             ]
-            sheet_name = build_sheet_name(run)
+            sheet_name = build_sheet_name(run, owner_name)
             rows = self._rows_for_run(run, run_posts)
         except Exception:
             LOGGER.error("Не удалось подготовить результаты для экспорта.")

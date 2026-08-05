@@ -40,7 +40,7 @@ class FakeSettingsStore:
         self.groups = groups
         self.load_calls = 0
 
-    def load(self):
+    def load(self, owner_id="admin"):
         self.load_calls += 1
         return {
             "revision": 1,
@@ -89,6 +89,9 @@ def make_service(group, selected_network=None, parser=None):
     service = ParseService(
         FakeSettingsStore([group]),
         parser_factories=factories,
+        allowed_instagram_account=(
+            group["url"] if group["network"] == "instagram" else ""
+        ),
     )
     return service, parser, factories
 
@@ -111,6 +114,23 @@ class ParseServiceSelectionTestCase(unittest.TestCase):
 
         self.assertEqual(factories["instagram"].calls, 1)
         self.assertEqual(len(parser.fetch_calls), 1)
+
+    def test_instagram_rejects_arbitrary_account_server_side(self):
+        group = make_group(network="instagram", url="arbitrary-account")
+        parser = FakeParser()
+        service = ParseService(
+            FakeSettingsStore([group]),
+            parser_factories={"instagram": RecordingFactory(parser)},
+            allowed_instagram_account="connected-torsunov-account",
+        )
+
+        with self.assertRaisesRegex(
+            ParseConfigurationError,
+            "только подключённый Business аккаунт",
+        ):
+            service.parse_group("group_1")
+
+        self.assertEqual(parser.fetch_calls, [])
 
     def test_telegram_group_calls_telegram_parser(self):
         group = make_group(network="telegram", url="https://t.me/test")

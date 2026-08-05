@@ -1,3 +1,4 @@
+import hmac
 import os
 import re
 from typing import Any
@@ -26,6 +27,9 @@ from server.postparser_web.vk_parser import (
 )
 
 
+INSTAGRAM_ACCOUNT_ID_ENVIRONMENT_VARIABLE = (
+    "POSTPARSER_INSTAGRAM_ACCOUNT_ID"
+)
 VK_ACCESS_TOKEN_ENVIRONMENT_VARIABLE = "POSTPARSER_VK_ACCESS_TOKEN"
 TELEGRAM_API_ID_ENVIRONMENT_VARIABLE = "TELEGRAM_API_ID"
 TELEGRAM_API_HASH_ENVIRONMENT_VARIABLE = "TELEGRAM_API_HASH"
@@ -251,6 +255,7 @@ class ParseService:
         self,
         settings_store: Any,
         parser_factories: dict[str, Any] | None = None,
+        allowed_instagram_account: Any = None,
     ):
         if not callable(getattr(settings_store, "load", None)):
             raise ParseConfigurationError(
@@ -267,14 +272,26 @@ class ParseService:
 
         self._settings_store = settings_store
         self._parser_factories = factories
+        if allowed_instagram_account is None:
+            allowed_instagram_account = os.environ.get(
+                INSTAGRAM_ACCOUNT_ID_ENVIRONMENT_VARIABLE,
+                "",
+            )
+        self._allowed_instagram_account = str(
+            allowed_instagram_account or ""
+        ).strip()
 
-    def parse_group(self, group_id: Any) -> dict[str, Any]:
+    def parse_group(
+        self,
+        group_id: Any,
+        owner_id: Any = "admin",
+    ) -> dict[str, Any]:
         normalized_group_id = str(group_id or "").strip()
         if not normalized_group_id:
             raise ParseServiceError("Идентификатор группы не указан.")
 
         try:
-            stored_document = self._settings_store.load()
+            stored_document = self._settings_store.load(owner_id=owner_id)
         except Exception:
             raise ParseServiceError(
                 "Не удалось загрузить настройки парсеров."
@@ -307,6 +324,18 @@ class ParseService:
             "url",
             "URL или имя канала",
         )
+        if network == "instagram":
+            if not self._allowed_instagram_account:
+                raise ParseConfigurationError(
+                    "Разрешённый Instagram Business аккаунт не настроен."
+                )
+            if not hmac.compare_digest(
+                group_url.casefold(),
+                self._allowed_instagram_account.casefold(),
+            ):
+                raise ParseConfigurationError(
+                    "Для Instagram разрешён только подключённый Business аккаунт."
+                )
         date_start = _required_group_string(
             group,
             "dateStart",

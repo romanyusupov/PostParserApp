@@ -14,8 +14,8 @@ class FakeResultsStore:
         self.prune_all_calls = []
         self.maintenance_calls = 0
 
-    def prune_group_runs(self, group_id, keep):
-        self.prune_group_calls.append((group_id, keep))
+    def prune_group_runs(self, group_id, keep, owner_id="admin"):
+        self.prune_group_calls.append((group_id, keep, owner_id))
         return 2
 
     def prune_all_group_runs(self, keep):
@@ -96,7 +96,10 @@ class StorageRetentionServiceTestCase(unittest.TestCase):
 
         result = service.cleanup_group("group_1")
 
-        self.assertEqual(store.prune_group_calls, [("group_1", 3)])
+        self.assertEqual(
+            store.prune_group_calls,
+            [("group_1", 3, "admin")],
+        )
         self.assertEqual(result, {"deleted_runs": 2, "deleted_media": 0})
 
     def test_maintenance_prunes_media_and_compacts_database(self):

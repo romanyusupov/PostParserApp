@@ -240,9 +240,10 @@ tbody tr.is-selected td {
 }
 
 .sort-indicator {
-  width: 8px;
+  width: 18px;
   font-size: 13px;
   line-height: 1;
+  text-align: center;
 }
 
 .action-cell {

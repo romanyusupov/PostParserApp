@@ -180,10 +180,11 @@ class InstagramOAuthTestCase(unittest.TestCase):
             self.token_path.read_text(encoding="utf-8"),
             f"{INSTAGRAM_ACCESS_TOKEN_ENVIRONMENT_VARIABLE}={LONG_TOKEN}\n",
         )
-        self.assertEqual(
-            stat.S_IMODE(self.token_path.stat().st_mode),
-            0o600,
-        )
+        if os.name != "nt":
+            self.assertEqual(
+                stat.S_IMODE(self.token_path.stat().st_mode),
+                0o600,
+            )
 
     def test_saved_token_is_available_to_new_parser_storage(self):
         _, query = self._connect()

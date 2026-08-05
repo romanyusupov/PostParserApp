@@ -1,4 +1,5 @@
 import pathlib
+import sqlite3
 import tempfile
 import unittest
 
@@ -123,6 +124,32 @@ class SettingsStoreTestCase(unittest.TestCase):
                 "revision": saved["revision"],
                 "settings": settings,
             },
+        )
+
+    def test_settings_are_isolated_by_owner_and_admin_keeps_legacy_key(self):
+        admin_settings = {"groups": [], "savedAt": "admin"}
+        user_settings = {"groups": [], "savedAt": "user"}
+
+        self.store.save(admin_settings, 0, owner_id="admin")
+        self.store.save(user_settings, 0, owner_id="user:1")
+
+        self.assertEqual(self.store.load("admin")["settings"], admin_settings)
+        self.assertEqual(self.store.load("user:1")["settings"], user_settings)
+        self.assertEqual(self.store.load("user:2")["revision"], 0)
+
+        connection = sqlite3.connect(self.database_path)
+        try:
+            keys = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT key FROM settings_documents"
+                ).fetchall()
+            }
+        finally:
+            connection.close()
+        self.assertEqual(
+            keys,
+            {"parser_settings", "parser_settings:user:1"},
         )
 
 

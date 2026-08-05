@@ -227,7 +227,7 @@
           ? "↓"
           : direction === "ascending"
             ? "↑"
-            : "";
+            : "↓↑";
       button.setAttribute("aria-label", actionLabel);
       button.title = actionLabel;
     });

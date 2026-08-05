@@ -1,5 +1,7 @@
 from flask import Blueprint, current_app, jsonify
 
+from server.postparser_web.authentication import current_owner_id
+
 
 run_bp = Blueprint("runs", __name__)
 
@@ -16,7 +18,10 @@ def _internal_error_response():
 @run_bp.get("/api/v1/runs/<int:run_id>")
 def get_run(run_id):
     try:
-        run = current_app.extensions["results_store"].get_run(run_id)
+        run = current_app.extensions["results_store"].get_run(
+            run_id,
+            owner_id=current_owner_id(),
+        )
     except Exception:
         current_app.logger.exception(
             "Не удалось загрузить запуск парсинга."
@@ -43,7 +48,8 @@ def get_run(run_id):
 def list_runs():
     try:
         runs = current_app.extensions["results_store"].list_runs(
-            limit=50
+            limit=50,
+            owner_id=current_owner_id(),
         )
     except Exception:
         current_app.logger.exception(

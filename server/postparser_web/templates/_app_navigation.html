@@ -23,7 +23,26 @@
       aria-controls="resultsPanel"
       tabindex="{{ '0' if active_section == 'results' else '-1' }}"
     >Результаты</a>
+    {% if authenticated_is_admin %}
+    <a
+      id="accessParentTab"
+      class="parent-tab{% if active_section == 'access' %} is-active{% endif %}"
+      href="/admin/access"
+      role="tab"
+      aria-selected="{{ 'true' if active_section == 'access' else 'false' }}"
+      aria-controls="accessPanel"
+      tabindex="{{ '0' if active_section == 'access' else '-1' }}"
+    >Дать доступ</a>
+    {% endif %}
   </div>
+  <div class="session-controls">
+    <span class="session-user">{{ authenticated_user.name }}</span>
+    <form action="/logout" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="session-logout" type="submit">Выйти</button>
+    </form>
+  </div>
+  {% if active_section != 'access' %}
   <div class="group-tabs-scroll">
     <div
       id="groupTabs"
@@ -32,4 +51,5 @@
       aria-label="Группы"
     ></div>
   </div>
+  {% endif %}
 </nav>

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <title>Дать доступ</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='settings.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='auth.css') }}">
+    <script src="{{ url_for('static', filename='csrf.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='app_tabs.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='admin_access.js') }}" defer></script>
+  </head>
+  <body>
+    <main class="page-shell">
+      {% include "_app_navigation.html" %}
+      <section id="accessPanel" class="application-panel access-panel" role="tabpanel">
+        <header class="page-header">
+          <div>
+            <div class="eyebrow">Администратор</div>
+            <h1>Дать доступ</h1>
+            <p class="page-description">Код показывается только один раз. Скопируйте его и передайте пользователю.</p>
+          </div>
+          <button id="addUserButton" class="button button-primary" type="button">Добавить пользователя</button>
+        </header>
+        <div id="generatedAccess" class="generated-access" role="status" hidden></div>
+        <section class="access-users" aria-labelledby="accessUsersTitle">
+          <h2 id="accessUsersTitle">Пользователи</h2>
+          <div id="accessUsersList" class="access-users-list"></div>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>
