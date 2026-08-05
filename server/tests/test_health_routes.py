@@ -63,6 +63,38 @@ class HealthRoutesTestCase(unittest.TestCase):
 
         self.assertEqual(self._data_snapshot(), before)
 
+    def test_favicon_is_available_as_static_icon(self):
+        response = self.client.get("/static/favicon.ico")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            response.mimetype,
+            {"image/x-icon", "image/vnd.microsoft.icon"},
+        )
+        self.assertGreater(len(response.data), 0)
+
+    def test_every_page_template_references_the_shared_favicon(self):
+        templates_directory = (
+            pathlib.Path(__file__).parents[1]
+            / "postparser_web"
+            / "templates"
+        )
+
+        for template_name in (
+            "login.html",
+            "admin_access.html",
+            "settings.html",
+            "results.html",
+        ):
+            with self.subTest(template=template_name):
+                template = (templates_directory / template_name).read_text(
+                    encoding="utf-8"
+                )
+                self.assertIn(
+                    "url_for('static', filename='favicon.ico')",
+                    template,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
