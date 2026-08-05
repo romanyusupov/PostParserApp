@@ -65,6 +65,7 @@ class HealthRoutesTestCase(unittest.TestCase):
 
     def test_favicon_is_available_as_static_icon(self):
         response = self.client.get("/static/favicon.ico")
+        self.addCleanup(response.close)
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(
