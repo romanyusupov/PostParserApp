@@ -190,11 +190,6 @@ def validate_settings(settings):
             "Поле groups должно быть списком."
         )
 
-    if not groups:
-        raise SettingsValidationError(
-            "Добавьте хотя бы одну группу."
-        )
-
     used_group_names = set()
 
     for group_index, group in enumerate(groups, start=1):

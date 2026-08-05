@@ -163,11 +163,8 @@ class ValidateSettingsTestCase(unittest.TestCase):
                     make_valid_settings(network)
                 )
 
-    def test_rejects_empty_groups(self):
-        with self.assertRaises(SettingsValidationError):
-            validate_settings(
-                {"groups": [], "savedAt": ""}
-            )
+    def test_empty_groups_are_valid_for_a_new_or_cleared_user(self):
+        validate_settings({"groups": [], "savedAt": ""})
 
     def test_rejects_duplicate_group_names(self):
         settings = make_valid_settings()

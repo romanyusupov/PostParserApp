@@ -150,18 +150,19 @@ class SettingsRoutesTestCase(unittest.TestCase):
         self.assertFalse(data["success"])
         self.assertEqual(data["currentRevision"], 1)
 
-    def test_empty_or_invalid_groups_return_bad_request(self):
-        for groups in ([], "не список"):
-            with self.subTest(groups=groups):
-                response = self.put(
-                    0,
-                    {
-                        "groups": groups,
-                        "savedAt": "",
-                    },
-                )
+    def test_empty_groups_can_be_saved(self):
+        response = self.put(0, {"groups": [], "savedAt": ""})
 
-                self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["settings"]["groups"], [])
+
+    def test_invalid_groups_return_bad_request(self):
+        response = self.put(
+            0,
+            {"groups": "не список", "savedAt": ""},
+        )
+
+        self.assertEqual(response.status_code, 400)
 
     def test_missing_revision_returns_bad_request(self):
         response = self.client.put(
