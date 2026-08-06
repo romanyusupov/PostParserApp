@@ -13,6 +13,9 @@ from server.postparser_web.google_sheets_export import (
 )
 from server.postparser_web.health_routes import health_bp
 from server.postparser_web.instagram_oauth import instagram_oauth_bp
+from server.postparser_web.instagram_oauth_store import (
+    InstagramOAuthInvitationStore,
+)
 from server.postparser_web.media_routes import media_bp
 from server.postparser_web.parse_routes import parse_bp
 from server.postparser_web.parse_runner import ParseRunnerService
@@ -59,6 +62,12 @@ def create_app(test_config=None):
     if access_store is None:
         access_store = AccessStore(access_database_path)
     app.extensions["access_store"] = access_store
+    instagram_oauth_store = app.config.get("INSTAGRAM_OAUTH_STORE")
+    if instagram_oauth_store is None:
+        instagram_oauth_store = InstagramOAuthInvitationStore(
+            access_database_path
+        )
+    app.extensions["instagram_oauth_store"] = instagram_oauth_store
     install_authentication(app)
 
     results_store = app.config.get("RESULTS_STORE")

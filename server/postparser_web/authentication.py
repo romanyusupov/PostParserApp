@@ -21,6 +21,8 @@ PUBLIC_ENDPOINTS = {
     "media.telegram_photo",
     "authentication.login_page",
     "authentication.login",
+    "instagram_oauth.instagram_connect",
+    "instagram_oauth.instagram_callback",
 }
 
 

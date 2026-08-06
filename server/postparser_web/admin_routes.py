@@ -1,9 +1,13 @@
+import os
+import urllib.parse
+
 from flask import Blueprint, current_app, jsonify, render_template, request
 
 from server.postparser_web.authentication import admin_required
 
 
 admin_bp = Blueprint("admin", __name__)
+PUBLIC_BASE_URL_ENVIRONMENT_VARIABLE = "POSTPARSER_PUBLIC_BASE_URL"
 
 
 @admin_bp.get("/admin/access")
@@ -24,6 +28,31 @@ def list_users():
 def create_user():
     user = current_app.extensions["access_store"].create_user()
     return jsonify({"success": True, "user": user}), 201
+
+
+@admin_bp.post("/api/v1/admin/instagram/oauth-invitations")
+@admin_required
+def create_instagram_oauth_invitation():
+    invitation = current_app.extensions[
+        "instagram_oauth_store"
+    ].create_setup_invitation()
+    public_base_url = os.environ.get(
+        PUBLIC_BASE_URL_ENVIRONMENT_VARIABLE,
+        "",
+    ).strip().rstrip("/")
+    if not public_base_url:
+        public_base_url = request.url_root.rstrip("/")
+    query = urllib.parse.urlencode(
+        {"setup_token": invitation["setup_token"]}
+    )
+    setup_url = f"{public_base_url}/instagram/connect?{query}"
+    return jsonify(
+        {
+            "success": True,
+            "setup_url": setup_url,
+            "expires_at": invitation["expires_at"],
+        }
+    ), 201
 
 
 @admin_bp.patch("/api/v1/admin/users/<int:user_id>")

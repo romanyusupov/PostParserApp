@@ -25,6 +25,16 @@
           <button id="addUserButton" class="button button-primary" type="button">Добавить пользователя</button>
         </header>
         <div id="generatedAccess" class="generated-access" role="status" hidden></div>
+        <section class="access-users" aria-labelledby="instagramOAuthTitle">
+          <div class="access-section-heading">
+            <div>
+              <h2 id="instagramOAuthTitle">Instagram</h2>
+              <p class="page-description">Одноразовая ссылка действует 15 минут и показывается только после создания.</p>
+            </div>
+            <button id="createInstagramOAuthLink" class="button button-secondary" type="button">Создать ссылку подключения Instagram</button>
+          </div>
+          <div id="generatedInstagramOAuthLink" class="generated-access" role="status" hidden></div>
+        </section>
         <section class="access-users" aria-labelledby="accessUsersTitle">
           <h2 id="accessUsersTitle">Пользователи</h2>
           <div id="accessUsersList" class="access-users-list"></div>

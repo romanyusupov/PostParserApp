@@ -4,6 +4,12 @@
   const addButton = document.getElementById("addUserButton");
   const generatedAccess = document.getElementById("generatedAccess");
   const usersList = document.getElementById("accessUsersList");
+  const instagramOAuthButton = document.getElementById(
+    "createInstagramOAuthLink"
+  );
+  const generatedInstagramOAuthLink = document.getElementById(
+    "generatedInstagramOAuthLink"
+  );
   const oneTimeCodes = new Map();
 
   function element(tagName, className, text) {
@@ -124,6 +130,43 @@
       generatedAccess.hidden = false;
     } finally {
       addButton.disabled = false;
+    }
+  });
+
+  instagramOAuthButton.addEventListener("click", async function () {
+    instagramOAuthButton.disabled = true;
+    generatedInstagramOAuthLink.hidden = true;
+    generatedInstagramOAuthLink.replaceChildren();
+    try {
+      const payload = await request(
+        "/api/v1/admin/instagram/oauth-invitations",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        }
+      );
+      const link = element("a", "instagram-oauth-link", payload.setup_url);
+      link.href = payload.setup_url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      const copy = element(
+        "button",
+        "button button-secondary",
+        "Скопировать ссылку"
+      );
+      copy.type = "button";
+      copy.addEventListener("click", async function () {
+        await navigator.clipboard.writeText(payload.setup_url);
+        copy.textContent = "Скопировано";
+      });
+      generatedInstagramOAuthLink.append(link, copy);
+      generatedInstagramOAuthLink.hidden = false;
+    } catch (error) {
+      generatedInstagramOAuthLink.textContent = error.message;
+      generatedInstagramOAuthLink.hidden = false;
+    } finally {
+      instagramOAuthButton.disabled = false;
     }
   });
 

@@ -5,9 +5,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-from flask import Blueprint, current_app, jsonify, redirect, request
-
-from server.postparser_web.authentication import admin_required
+from flask import Blueprint, current_app, redirect, render_template, request
 
 from server.postparser_web.instagram_token_store import (
     InstagramTokenStorageError,
@@ -25,7 +23,10 @@ INSTAGRAM_OAUTH_SCOPES = (
 INSTAGRAM_AUTHORIZATION_URL = "https://www.instagram.com/oauth/authorize"
 INSTAGRAM_TOKEN_URL = "https://api.instagram.com/oauth/access_token"
 INSTAGRAM_LONG_TOKEN_URL = "https://graph.instagram.com/access_token"
-INSTAGRAM_OAUTH_STATE_COOKIE = "postparser_instagram_oauth_state"
+INSTAGRAM_PROFILE_URL = "https://graph.instagram.com/v22.0/me"
+INSTAGRAM_ACCOUNT_ID_ENVIRONMENT_VARIABLE = (
+    "POSTPARSER_INSTAGRAM_ACCOUNT_ID"
+)
 
 
 instagram_oauth_bp = Blueprint("instagram_oauth", __name__)
@@ -105,62 +106,108 @@ def _token_storage_path():
     return current_app.config.get("INSTAGRAM_TOKEN_ENV_PATH")
 
 
-def _safe_error_response(message: str, status_code: int):
-    return jsonify({"success": False, "error": message}), status_code
+def _invitation_store():
+    return current_app.extensions["instagram_oauth_store"]
+
+
+def _safe_page(title: str, message: str, status_code: int = 200):
+    return render_template(
+        "instagram_oauth_result.html",
+        title=title,
+        message=message,
+    ), status_code
+
+
+def _connected_account_is_allowed(profile: Any) -> bool:
+    if not isinstance(profile, dict):
+        return False
+    allowed_account_id = os.environ.get(
+        INSTAGRAM_ACCOUNT_ID_ENVIRONMENT_VARIABLE,
+        "",
+    ).strip()
+    if not allowed_account_id:
+        return False
+    candidate_ids = {
+        str(profile.get("id") or "").strip(),
+        str(profile.get("user_id") or "").strip(),
+    }
+    return any(
+        candidate
+        and secrets.compare_digest(candidate, allowed_account_id)
+        for candidate in candidate_ids
+    )
 
 
 @instagram_oauth_bp.get("/instagram/connect")
-@admin_required
 def instagram_connect():
+    setup_token = request.args.get("setup_token", "").strip()
+    if not setup_token:
+        return _safe_page(
+            "Ссылка недействительна",
+            "Запросите новую ссылку подключения у администратора.",
+            403,
+        )
+
     try:
         configuration = _oauth_configuration()
     except InstagramOAuthError:
-        return _safe_error_response("Instagram OAuth не настроен.", 503)
+        return _safe_page(
+            "Instagram OAuth не настроен",
+            "Обратитесь к администратору PostParser.",
+            503,
+        )
 
-    state = secrets.token_urlsafe(32)
+    oauth_state = _invitation_store().claim_setup_token(setup_token)
+    if not oauth_state:
+        return _safe_page(
+            "Ссылка недействительна",
+            "Ссылка уже использована или срок её действия истёк.",
+            403,
+        )
+
     authorization_url = INSTAGRAM_AUTHORIZATION_URL + "?" + urllib.parse.urlencode(
         {
             "client_id": configuration["app_id"],
             "redirect_uri": configuration["redirect_uri"],
             "response_type": "code",
             "scope": ",".join(INSTAGRAM_OAUTH_SCOPES),
-            "state": state,
+            "state": oauth_state,
         }
     )
     response = redirect(authorization_url)
-    response.set_cookie(
-        INSTAGRAM_OAUTH_STATE_COOKIE,
-        state,
-        max_age=600,
-        secure=True,
-        httponly=True,
-        samesite="Lax",
-        path="/instagram/callback",
-    )
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
     return response
 
 
 @instagram_oauth_bp.get("/instagram/callback")
 def instagram_callback():
+    state = request.args.get("state", "").strip()
+    invitation_id = _invitation_store().consume_state(state)
+    if invitation_id is None:
+        current_app.logger.warning("Instagram OAuth state validation failed.")
+        return _safe_page(
+            "Ссылка недействительна",
+            "Проверка безопасности Instagram OAuth не пройдена.",
+            403,
+        )
+
     if request.args.get("error"):
         current_app.logger.warning("Instagram OAuth was declined.")
-        return _safe_error_response("Instagram OAuth не завершён.", 400)
+        return _safe_page(
+            "Instagram не подключён",
+            "Авторизация Instagram была отменена.",
+            400,
+        )
 
     code = request.args.get("code", "").strip()
-    state = request.args.get("state", "").strip()
-    expected_state = request.cookies.get(
-        INSTAGRAM_OAUTH_STATE_COOKIE,
-        "",
-    )
-
-    if (
-        not code
-        or not state
-        or not expected_state
-        or not secrets.compare_digest(state, expected_state)
-    ):
-        current_app.logger.warning("Instagram OAuth state validation failed.")
-        return _safe_error_response("Некорректный Instagram OAuth callback.", 400)
+    if not code:
+        current_app.logger.warning("Instagram OAuth callback has no code.")
+        return _safe_page(
+            "Instagram не подключён",
+            "Instagram не вернул код авторизации.",
+            400,
+        )
 
     try:
         configuration = _oauth_configuration(require_secret=True)
@@ -196,25 +243,47 @@ def instagram_callback():
         access_token = str(
             long_token_payload.get("access_token", short_token)
         ).strip()
+        profile = transport(
+            INSTAGRAM_PROFILE_URL,
+            method="GET",
+            parameters={
+                "fields": "id,user_id,username,account_type",
+                "access_token": access_token,
+            },
+        )
+        if not _connected_account_is_allowed(profile):
+            current_app.logger.warning(
+                "Instagram OAuth connected account is not allowed."
+            )
+            return _safe_page(
+                "Аккаунт не разрешён",
+                "Эта ссылка предназначена для другого Instagram-аккаунта.",
+                403,
+            )
         save_instagram_access_token(
             access_token,
             path=_token_storage_path(),
         )
+        if not _invitation_store().mark_invitation_used(invitation_id):
+            raise InstagramOAuthError(
+                "Instagram OAuth invitation could not be completed."
+            )
     except (InstagramOAuthError, InstagramTokenStorageError):
         current_app.logger.warning("Instagram OAuth could not be completed.")
-        return _safe_error_response("Не удалось завершить Instagram OAuth.", 502)
+        return _safe_page(
+            "Instagram не подключён",
+            "Не удалось завершить подключение Instagram.",
+            502,
+        )
     except Exception:
         current_app.logger.warning("Instagram OAuth request failed.")
-        return _safe_error_response("Не удалось завершить Instagram OAuth.", 502)
+        return _safe_page(
+            "Instagram не подключён",
+            "Не удалось завершить подключение Instagram.",
+            502,
+        )
 
-    response = jsonify(
-        {
-            "success": True,
-            "message": "Instagram подключён.",
-        }
+    return _safe_page(
+        "Instagram успешно подключён",
+        "Эту страницу можно закрыть.",
     )
-    response.delete_cookie(
-        INSTAGRAM_OAUTH_STATE_COOKIE,
-        path="/instagram/callback",
-    )
-    return response
