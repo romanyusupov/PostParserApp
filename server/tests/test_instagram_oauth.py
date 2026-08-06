@@ -42,9 +42,15 @@ ALLOWED_ACCOUNT_ID = "allowed-business-account-id"
 
 
 class FakeOAuthTransport:
-    def __init__(self, error=None, profile_id=ALLOWED_ACCOUNT_ID):
+    def __init__(
+        self,
+        error=None,
+        profile_id=ALLOWED_ACCOUNT_ID,
+        profile_username="connected-account",
+    ):
         self.error = error
         self.profile_id = profile_id
+        self.profile_username = profile_username
         self.calls = []
 
     def __call__(self, url, *, method, parameters):
@@ -65,7 +71,7 @@ class FakeOAuthTransport:
             return {
                 "id": self.profile_id,
                 "user_id": self.profile_id,
-                "username": "connected-account",
+                "username": self.profile_username,
                 "account_type": "BUSINESS",
             }
         raise AssertionError(f"Unexpected OAuth URL: {url}")
@@ -276,6 +282,24 @@ class InstagramOAuthTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertFalse(self.token_path.exists())
+
+    def test_configured_username_allows_only_matching_profile(self):
+        allowed_username = "allowed.profile"
+        self.transport.profile_id = "different-numeric-id"
+        self.transport.profile_username = allowed_username.upper()
+        with mock.patch.dict(
+            os.environ,
+            {"POSTPARSER_INSTAGRAM_ACCOUNT_ID": allowed_username},
+        ):
+            _, query = self._connect()
+
+            response = self._callback(query["state"][0])
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            load_instagram_access_token(self.token_path),
+            LONG_TOKEN,
+        )
 
     def test_provider_error_and_transport_failure_are_safe(self):
         _, query = self._connect()

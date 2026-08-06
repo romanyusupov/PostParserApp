@@ -131,10 +131,23 @@ def _connected_account_is_allowed(profile: Any) -> bool:
         str(profile.get("id") or "").strip(),
         str(profile.get("user_id") or "").strip(),
     }
-    return any(
+    if any(
         candidate
         and secrets.compare_digest(candidate, allowed_account_id)
         for candidate in candidate_ids
+    ):
+        return True
+
+    if allowed_account_id.isdecimal():
+        return False
+
+    allowed_username = allowed_account_id.removeprefix("@").casefold()
+    connected_username = str(profile.get("username") or "").strip()
+    connected_username = connected_username.removeprefix("@").casefold()
+    return bool(
+        allowed_username
+        and connected_username
+        and secrets.compare_digest(connected_username, allowed_username)
     )
 
 
