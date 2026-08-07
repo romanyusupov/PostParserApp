@@ -420,6 +420,157 @@ class ParseServiceResultTestCase(unittest.TestCase):
 
         self.assertEqual(result["posts"][0]["advertising_type"], "")
 
+    def test_video_words_match_only_video_description(self):
+        parser = FakeParser(
+            posts=[
+                {
+                    "source": "vk",
+                    "external_id": "post_1",
+                    "text": "Обычная публикация",
+                    "video_description": "Отправьте слово ДЕТАЛЬ в сообщении",
+                }
+            ]
+        )
+        service, _, _ = make_service(
+            make_group(
+                advertising_types=[
+                    {
+                        "type": "Деталь.Уважение к М",
+                        "postWords": [],
+                        "videoWords": ["деталь"],
+                    }
+                ]
+            ),
+            parser=parser,
+        )
+
+        result = service.parse_group("group_1")
+
+        self.assertEqual(
+            result["posts"][0]["advertising_type"],
+            "Деталь.Уважение к М",
+        )
+
+    def test_video_words_are_not_searched_in_post_text(self):
+        parser = FakeParser(
+            posts=[
+                {
+                    "source": "vk",
+                    "external_id": "post_1",
+                    "text": "Отправьте слово ДЕТАЛЬ в сообщении",
+                    "video_description": "Обычное описание видео",
+                }
+            ]
+        )
+        service, _, _ = make_service(
+            make_group(
+                advertising_types=[
+                    {
+                        "type": "Деталь.Уважение к М",
+                        "postWords": [],
+                        "videoWords": ["деталь"],
+                    }
+                ]
+            ),
+            parser=parser,
+        )
+
+        result = service.parse_group("group_1")
+
+        self.assertEqual(result["posts"][0]["advertising_type"], "")
+
+    def test_post_words_are_not_searched_in_video_description(self):
+        parser = FakeParser(
+            posts=[
+                {
+                    "source": "vk",
+                    "external_id": "post_1",
+                    "text": "Обычная публикация",
+                    "video_description": "В описании есть промокод",
+                }
+            ]
+        )
+        service, _, _ = make_service(
+            make_group(
+                advertising_types=[
+                    {
+                        "type": "Реклама",
+                        "postWords": ["промокод"],
+                        "videoWords": [],
+                    }
+                ]
+            ),
+            parser=parser,
+        )
+
+        result = service.parse_group("group_1")
+
+        self.assertEqual(result["posts"][0]["advertising_type"], "")
+
+    def test_first_matching_advertising_rule_wins(self):
+        parser = FakeParser(
+            posts=[
+                {
+                    "source": "vk",
+                    "external_id": "post_1",
+                    "text": "Используйте промокод",
+                    "video_description": "Отправьте слово деталь",
+                }
+            ]
+        )
+        service, _, _ = make_service(
+            make_group(
+                advertising_types=[
+                    {
+                        "type": "Первое правило",
+                        "postWords": ["промокод"],
+                        "videoWords": [],
+                    },
+                    {
+                        "type": "Второе правило",
+                        "postWords": [],
+                        "videoWords": ["деталь"],
+                    },
+                ]
+            ),
+            parser=parser,
+        )
+
+        result = service.parse_group("group_1")
+
+        self.assertEqual(
+            result["posts"][0]["advertising_type"],
+            "Первое правило",
+        )
+
+    def test_empty_video_description_is_safe(self):
+        parser = FakeParser(
+            posts=[
+                {
+                    "source": "vk",
+                    "external_id": "post_1",
+                    "text": "Обычная публикация",
+                    "video_description": "",
+                }
+            ]
+        )
+        service, _, _ = make_service(
+            make_group(
+                advertising_types=[
+                    {
+                        "type": "Реклама",
+                        "postWords": [],
+                        "videoWords": ["деталь"],
+                    }
+                ]
+            ),
+            parser=parser,
+        )
+
+        result = service.parse_group("group_1")
+
+        self.assertEqual(result["posts"][0]["advertising_type"], "")
+
     def test_safe_parser_warning_is_returned(self):
         warning = (
             "Instagram Insights unavailable: missing "

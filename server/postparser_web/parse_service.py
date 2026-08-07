@@ -214,25 +214,43 @@ def _advertising_words(value: Any) -> list[str]:
     return result
 
 
-def _advertising_type(text: Any, advertising_types: Any) -> str:
+def _matches_advertising_words(text: Any, words: Any) -> bool:
+    normalized_text = _normalize_advertising_text(text)
+    for word in _advertising_words(words):
+        normalized_word = _normalize_advertising_text(word)
+        if (
+            normalized_text
+            and normalized_word
+            and f" {normalized_word} " in f" {normalized_text} "
+        ):
+            return True
+    return False
+
+
+def _advertising_type(
+    text: Any,
+    video_description: Any,
+    advertising_types: Any,
+) -> str:
     if not isinstance(advertising_types, list):
         return ""
 
-    normalized_text = _normalize_advertising_text(text)
     for rule in advertising_types:
         if not isinstance(rule, dict):
             continue
         type_name = str(rule.get("type") or "").strip()
         if not type_name:
             continue
-        for word in _advertising_words(rule.get("postWords", [])):
-            normalized_word = _normalize_advertising_text(word)
-            if (
-                normalized_text
-                and normalized_word
-                and f" {normalized_word} " in f" {normalized_text} "
-            ):
-                return type_name
+        post_words_match = _matches_advertising_words(
+            text,
+            rule.get("postWords", []),
+        )
+        video_words_match = _matches_advertising_words(
+            video_description,
+            rule.get("videoWords", []),
+        )
+        if post_words_match or video_words_match:
+            return type_name
 
     return ""
 
@@ -245,6 +263,7 @@ def _add_advertising_types(
         if isinstance(post, dict):
             post["advertising_type"] = _advertising_type(
                 post.get("text"),
+                post.get("video_description"),
                 advertising_types,
             )
     return posts
