@@ -1,4 +1,6 @@
 import datetime
+import io
+import json
 import os
 import pathlib
 import re
@@ -7,6 +9,7 @@ import stat
 import tempfile
 import unittest
 import urllib.parse
+import urllib.error
 from unittest import mock
 
 from server.postparser_web import create_app
@@ -17,6 +20,8 @@ from server.postparser_web.instagram_oauth import (
     INSTAGRAM_PROFILE_URL,
     INSTAGRAM_REDIRECT_URI,
     INSTAGRAM_TOKEN_URL,
+    InstagramOAuthTransportError,
+    _default_oauth_transport,
 )
 from server.postparser_web.instagram_oauth_store import (
     SETUP_TOKEN_TTL_SECONDS,
@@ -402,13 +407,86 @@ class InstagramOAuthTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(self.transport.calls, [])
 
+    def test_meta_http_error_is_logged_with_safe_stage_details(self):
+        setup_url, _ = self._create_invitation()
+        _, query = self._connect(setup_url)
+        unsafe_message = (
+            f"Invalid code={AUTHORIZATION_CODE} "
+            f"client_secret={APP_SECRET}"
+        )
+        self.app.config["INSTAGRAM_OAUTH_TRANSPORT"] = mock.Mock(
+            side_effect=InstagramOAuthTransportError(
+                status=400,
+                error_code=100,
+                error_type="OAuthException",
+                safe_message=unsafe_message,
+            )
+        )
+
+        with self.assertLogs(self.app.logger.name, level="WARNING") as logs:
+            response = self._callback(query["state"][0])
+
+        combined = "\n".join(logs.output)
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("stage=exchange_code_for_short_token", combined)
+        self.assertIn("status=400", combined)
+        self.assertIn("error_code=100", combined)
+        self.assertIn("error_type=OAuthException", combined)
+        self.assertIn("message=Meta rejected the OAuth request", combined)
+        for secret in (AUTHORIZATION_CODE, APP_SECRET, query["state"][0]):
+            self.assertNotIn(secret, combined)
+
+    def test_default_transport_extracts_meta_error_without_secrets(self):
+        provider_payload = json.dumps(
+            {
+                "error_type": "OAuthException",
+                "code": 400,
+                "error_message": (
+                    f"Matching code {AUTHORIZATION_CODE} was not found; "
+                    f"secret {APP_SECRET}"
+                ),
+            }
+        ).encode("utf-8")
+        http_error = urllib.error.HTTPError(
+            INSTAGRAM_TOKEN_URL,
+            400,
+            "Bad Request",
+            {},
+            io.BytesIO(provider_payload),
+        )
+
+        with (
+            mock.patch(
+                "server.postparser_web.instagram_oauth.urllib.request.urlopen",
+                side_effect=http_error,
+            ),
+            self.assertRaises(InstagramOAuthTransportError) as raised,
+        ):
+            _default_oauth_transport(
+                INSTAGRAM_TOKEN_URL,
+                method="POST",
+                parameters={
+                    "code": AUTHORIZATION_CODE,
+                    "client_secret": APP_SECRET,
+                },
+            )
+
+        error = raised.exception
+        self.assertEqual(error.status, "400")
+        self.assertEqual(error.error_code, "400")
+        self.assertEqual(error.error_type, "OAuthException")
+        self.assertNotIn(AUTHORIZATION_CODE, error.safe_message)
+        self.assertNotIn(APP_SECRET, error.safe_message)
+        self.assertIn("[REDACTED]", error.safe_message)
+
     def test_callback_is_public_and_saves_token_after_account_check(self):
         _, query = self._connect()
         unauthenticated_client = self.app.test_client()
-        response = self._callback(
-            query["state"][0],
-            client=unauthenticated_client,
-        )
+        with self.assertLogs(self.app.logger.name, level="INFO") as logs:
+            response = self._callback(
+                query["state"][0],
+                client=unauthenticated_client,
+            )
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(
@@ -416,6 +494,23 @@ class InstagramOAuthTestCase(unittest.TestCase):
             response.get_data(as_text=True),
         )
         self.assertEqual(len(self.transport.calls), 3)
+        combined_logs = "\n".join(logs.output)
+        for stage in (
+            "exchange_code_for_short_token",
+            "exchange_short_token_for_long_token",
+            "fetch_instagram_account",
+            "validate_account",
+            "save_token",
+        ):
+            self.assertIn(f"stage={stage}", combined_logs)
+        for secret in (
+            AUTHORIZATION_CODE,
+            SHORT_TOKEN,
+            LONG_TOKEN,
+            APP_SECRET,
+            query["state"][0],
+        ):
+            self.assertNotIn(secret, combined_logs)
         self.assertEqual(
             self.transport.calls[0]["parameters"]["code"],
             AUTHORIZATION_CODE,

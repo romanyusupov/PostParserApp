@@ -2,6 +2,7 @@ import json
 import os
 import secrets
 import urllib.parse
+import urllib.error
 import urllib.request
 from typing import Any
 
@@ -35,6 +36,117 @@ instagram_oauth_bp = Blueprint("instagram_oauth", __name__)
 
 class InstagramOAuthError(Exception):
     """Безопасная ошибка Instagram OAuth без секретных данных."""
+
+
+class InstagramOAuthTransportError(InstagramOAuthError):
+    def __init__(
+        self,
+        *,
+        status: Any = "unknown",
+        error_code: Any = "unknown",
+        error_type: Any = "transport_error",
+        safe_message: Any = "Meta request failed",
+    ):
+        super().__init__("Instagram OAuth Meta request failed.")
+        self.status = _safe_log_identifier(status)
+        self.error_code = _safe_log_identifier(error_code)
+        self.error_type = _safe_log_identifier(error_type)
+        self.safe_message = _safe_log_message(safe_message)
+
+
+class InstagramOAuthTransportResponse:
+    def __init__(self, payload: dict[str, Any], status: Any):
+        self.payload = payload
+        self.status = _safe_log_identifier(status)
+
+
+def _safe_log_identifier(value: Any, fallback: str = "unknown") -> str:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return fallback
+    if not all(character.isalnum() or character in "_.-" for character in normalized):
+        return fallback
+    return normalized[:100]
+
+
+def _safe_log_message(value: Any) -> str:
+    normalized = " ".join(str(value or "").split())
+    return normalized[:300] or "Meta request failed"
+
+
+def _redacted_meta_message(
+    value: Any,
+    parameters: dict[str, Any],
+) -> str:
+    message = _safe_log_message(value)
+    for name in (
+        "code",
+        "access_token",
+        "refresh_token",
+        "client_secret",
+        "state",
+    ):
+        secret_value = str(parameters.get(name) or "")
+        if secret_value:
+            message = message.replace(secret_value, "[REDACTED]")
+    lowered = message.casefold()
+    if any(
+        marker in lowered
+        for marker in (
+            "access_token=",
+            "refresh_token=",
+            "client_secret=",
+            "code=",
+            "state=",
+            "cookie=",
+        )
+    ):
+        return "Meta rejected the OAuth request"
+    return message
+
+
+def _meta_error_details(
+    payload: Any,
+    parameters: dict[str, Any],
+) -> tuple[str, str, str]:
+    if not isinstance(payload, dict):
+        return "unknown", "invalid_response", "Meta returned an invalid response"
+
+    nested_error = payload.get("error")
+    error = nested_error if isinstance(nested_error, dict) else payload
+    error_code = _safe_log_identifier(
+        error.get("code", error.get("error_code"))
+    )
+    error_type = _safe_log_identifier(
+        error.get("type", error.get("error_type")),
+        "meta_error",
+    )
+    message = error.get("message", error.get("error_message"))
+    return (
+        error_code,
+        error_type,
+        _redacted_meta_message(message, parameters),
+    )
+
+
+def _log_oauth_stage(
+    stage: str,
+    *,
+    status: Any,
+    error_code: Any,
+    error_type: Any,
+    message: Any,
+    failed: bool = False,
+) -> None:
+    logger_method = current_app.logger.warning if failed else current_app.logger.info
+    logger_method(
+        "Instagram OAuth stage=%s status=%s error_code=%s error_type=%s message=%s",
+        _safe_log_identifier(stage),
+        _safe_log_identifier(status),
+        _safe_log_identifier(error_code, "none"),
+        _safe_log_identifier(error_type, "none"),
+        _safe_log_message(message),
+    )
 
 
 def _oauth_configuration(require_secret: bool = False) -> dict[str, str]:
@@ -137,15 +249,41 @@ def _default_oauth_transport(
         headers=headers,
         method=method,
     )
-    with urllib.request.urlopen(oauth_request, timeout=30) as response:
-        payload = json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(oauth_request, timeout=30) as response:
+            status = getattr(response, "status", 200)
+            try:
+                payload = json.loads(response.read().decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                raise InstagramOAuthTransportError(
+                    status=status,
+                    error_type="invalid_json",
+                    safe_message="Meta returned an invalid JSON response",
+                ) from None
+    except urllib.error.HTTPError as error:
+        try:
+            error_payload = json.loads(error.read().decode("utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            error_payload = {}
+        error_code, error_type, safe_message = _meta_error_details(
+            error_payload,
+            parameters,
+        )
+        raise InstagramOAuthTransportError(
+            status=error.code,
+            error_code=error_code,
+            error_type=error_type,
+            safe_message=safe_message,
+        ) from None
 
     if not isinstance(payload, dict):
-        raise InstagramOAuthError(
-            "Instagram OAuth вернул некорректный ответ."
+        raise InstagramOAuthTransportError(
+            status=status,
+            error_type="invalid_response",
+            safe_message="Meta returned an invalid response",
         )
 
-    return payload
+    return InstagramOAuthTransportResponse(payload, status)
 
 
 def _oauth_transport():
@@ -153,6 +291,68 @@ def _oauth_transport():
         "INSTAGRAM_OAUTH_TRANSPORT",
         _default_oauth_transport,
     )
+
+
+def _oauth_stage_request(
+    stage: str,
+    transport: Any,
+    url: str,
+    *,
+    method: str,
+    parameters: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        result = transport(
+            url,
+            method=method,
+            parameters=parameters,
+        )
+    except InstagramOAuthTransportError as error:
+        _log_oauth_stage(
+            stage,
+            status=error.status,
+            error_code=error.error_code,
+            error_type=error.error_type,
+            message=_redacted_meta_message(error.safe_message, parameters),
+            failed=True,
+        )
+        raise InstagramOAuthError("Instagram OAuth Meta request failed.") from None
+    except Exception:
+        _log_oauth_stage(
+            stage,
+            status="unknown",
+            error_code="unknown",
+            error_type="transport_error",
+            message="Meta request failed",
+            failed=True,
+        )
+        raise InstagramOAuthError("Instagram OAuth Meta request failed.") from None
+
+    if isinstance(result, InstagramOAuthTransportResponse):
+        payload = result.payload
+        status = result.status
+    else:
+        payload = result
+        status = 200
+    if not isinstance(payload, dict):
+        _log_oauth_stage(
+            stage,
+            status=status,
+            error_code="unknown",
+            error_type="invalid_response",
+            message="Meta returned an invalid response",
+            failed=True,
+        )
+        raise InstagramOAuthError("Instagram OAuth Meta request failed.")
+
+    _log_oauth_stage(
+        stage,
+        status=status,
+        error_code="none",
+        error_type="none",
+        message="success",
+    )
+    return payload
 
 
 def _token_storage_path():
@@ -275,7 +475,9 @@ def instagram_callback():
     try:
         configuration = _oauth_configuration(require_secret=True)
         transport = _oauth_transport()
-        short_token_payload = transport(
+        short_token_payload = _oauth_stage_request(
+            "exchange_code_for_short_token",
+            transport,
             INSTAGRAM_TOKEN_URL,
             method="POST",
             parameters={
@@ -290,11 +492,21 @@ def instagram_callback():
             short_token_payload.get("access_token", "")
         ).strip()
         if not short_token:
+            _log_oauth_stage(
+                "exchange_code_for_short_token",
+                status=200,
+                error_code="missing_access_token",
+                error_type="invalid_response",
+                message="Meta response did not contain an access token",
+                failed=True,
+            )
             raise InstagramOAuthError(
                 "Instagram OAuth не вернул access token."
             )
 
-        long_token_payload = transport(
+        long_token_payload = _oauth_stage_request(
+            "exchange_short_token_for_long_token",
+            transport,
             INSTAGRAM_LONG_TOKEN_URL,
             method="GET",
             parameters={
@@ -306,7 +518,9 @@ def instagram_callback():
         access_token = str(
             long_token_payload.get("access_token", short_token)
         ).strip()
-        profile = transport(
+        profile = _oauth_stage_request(
+            "fetch_instagram_account",
+            transport,
             INSTAGRAM_PROFILE_URL,
             method="GET",
             parameters={
@@ -315,6 +529,14 @@ def instagram_callback():
             },
         )
         if not _connected_account_is_allowed(profile):
+            _log_oauth_stage(
+                "validate_account",
+                status="not_applicable",
+                error_code="account_not_allowed",
+                error_type="validation_error",
+                message="Instagram account is not allowed",
+                failed=True,
+            )
             _invitation_store().release_invitation_claim(invitation_id)
             current_app.logger.warning(
                 "Instagram OAuth connected account is not allowed."
@@ -324,14 +546,60 @@ def instagram_callback():
                 "Эта ссылка предназначена для другого Instagram-аккаунта.",
                 403,
             )
-        save_instagram_access_token(
-            access_token,
-            path=_token_storage_path(),
+        _log_oauth_stage(
+            "validate_account",
+            status="not_applicable",
+            error_code="none",
+            error_type="none",
+            message="success",
         )
-        if not _invitation_store().mark_invitation_used(invitation_id):
+        try:
+            save_instagram_access_token(
+                access_token,
+                path=_token_storage_path(),
+            )
+            invitation_marked_used = _invitation_store().mark_invitation_used(
+                invitation_id
+            )
+        except InstagramTokenStorageError:
+            _log_oauth_stage(
+                "save_token",
+                status="not_applicable",
+                error_code="storage_error",
+                error_type="storage_error",
+                message="Instagram token could not be saved",
+                failed=True,
+            )
+            raise
+        except Exception:
+            _log_oauth_stage(
+                "save_token",
+                status="not_applicable",
+                error_code="storage_error",
+                error_type="storage_error",
+                message="Instagram token could not be saved",
+                failed=True,
+            )
+            raise
+        if not invitation_marked_used:
+            _log_oauth_stage(
+                "save_token",
+                status="not_applicable",
+                error_code="invitation_update_failed",
+                error_type="storage_error",
+                message="OAuth invitation could not be completed",
+                failed=True,
+            )
             raise InstagramOAuthError(
                 "Instagram OAuth invitation could not be completed."
             )
+        _log_oauth_stage(
+            "save_token",
+            status="not_applicable",
+            error_code="none",
+            error_type="none",
+            message="success",
+        )
     except (InstagramOAuthError, InstagramTokenStorageError):
         _invitation_store().release_invitation_claim(invitation_id)
         current_app.logger.warning("Instagram OAuth could not be completed.")
