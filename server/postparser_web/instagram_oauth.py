@@ -223,7 +223,7 @@ def instagram_connect():
             503,
         )
 
-    oauth_state = _invitation_store().claim_setup_token(setup_token)
+    oauth_state = _invitation_store().create_oauth_state(setup_token)
     if not oauth_state:
         return _safe_page(
             "Ссылка недействительна",
@@ -254,6 +254,7 @@ def instagram_callback():
         )
 
     if request.args.get("error"):
+        _invitation_store().release_invitation_claim(invitation_id)
         current_app.logger.warning("Instagram OAuth was declined.")
         return _safe_page(
             "Instagram не подключён",
@@ -263,6 +264,7 @@ def instagram_callback():
 
     code = request.args.get("code", "").strip()
     if not code:
+        _invitation_store().release_invitation_claim(invitation_id)
         current_app.logger.warning("Instagram OAuth callback has no code.")
         return _safe_page(
             "Instagram не подключён",
@@ -313,6 +315,7 @@ def instagram_callback():
             },
         )
         if not _connected_account_is_allowed(profile):
+            _invitation_store().release_invitation_claim(invitation_id)
             current_app.logger.warning(
                 "Instagram OAuth connected account is not allowed."
             )
@@ -330,6 +333,7 @@ def instagram_callback():
                 "Instagram OAuth invitation could not be completed."
             )
     except (InstagramOAuthError, InstagramTokenStorageError):
+        _invitation_store().release_invitation_claim(invitation_id)
         current_app.logger.warning("Instagram OAuth could not be completed.")
         return _safe_page(
             "Instagram не подключён",
@@ -337,6 +341,7 @@ def instagram_callback():
             502,
         )
     except Exception:
+        _invitation_store().release_invitation_claim(invitation_id)
         current_app.logger.warning("Instagram OAuth request failed.")
         return _safe_page(
             "Instagram не подключён",

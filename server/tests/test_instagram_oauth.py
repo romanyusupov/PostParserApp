@@ -297,7 +297,7 @@ class InstagramOAuthTestCase(unittest.TestCase):
         self.assertEqual(connect_response.status_code, 302)
         self.assertTrue(query["state"][0])
 
-    def test_verification_rejects_invalid_expired_and_claimed_tokens(self):
+    def test_verification_rejects_invalid_expired_and_used_tokens(self):
         invalid = self.admin_client.post(
             "/api/v1/admin/instagram/oauth-invitations/verify",
             json={"setup_token": "wrong-token"},
@@ -312,14 +312,15 @@ class InstagramOAuthTestCase(unittest.TestCase):
             headers=self._csrf_headers(),
         )
         setup_url, setup_token = self._create_invitation()
-        self._connect(setup_url)
-        claimed = self.admin_client.post(
+        _, query = self._connect(setup_url)
+        self.assertEqual(self._callback(query["state"][0]).status_code, 200)
+        used = self.admin_client.post(
             "/api/v1/admin/instagram/oauth-invitations/verify",
             json={"setup_token": setup_token},
             headers=self._csrf_headers(),
         )
 
-        for response in (invalid, expired, claimed):
+        for response in (invalid, expired, used):
             self.assertEqual(response.status_code, 200)
             self.assertFalse(response.get_json()["valid"])
             self.assertEqual(
@@ -354,7 +355,7 @@ class InstagramOAuthTestCase(unittest.TestCase):
         for forbidden_scope in FORBIDDEN_SCOPES:
             self.assertNotIn(forbidden_scope, response.location)
 
-    def test_expired_and_claimed_setup_tokens_are_forbidden(self):
+    def test_link_preview_does_not_consume_setup_token(self):
         invitation = self.app.extensions[
             "instagram_oauth_store"
         ].create_setup_invitation(ttl_seconds=-1)
@@ -362,13 +363,38 @@ class InstagramOAuthTestCase(unittest.TestCase):
             "/instagram/connect",
             query_string={"setup_token": invitation["setup_token"]},
         )
-        setup_url, _ = self._create_invitation()
-        first, _ = self._connect(setup_url)
-        second, _ = self._connect(setup_url)
+        setup_url, setup_token = self._create_invitation()
+        before = self._oauth_database_snapshot()
+        first, first_query = self._connect(setup_url)
+        after_preview = self._oauth_database_snapshot()
+        second, second_query = self._connect(setup_url)
+        verification = self.admin_client.post(
+            "/api/v1/admin/instagram/oauth-invitations/verify",
+            json={"setup_token": setup_token},
+            headers=self._csrf_headers(),
+        )
 
         self.assertEqual(expired.status_code, 403)
         self.assertEqual(first.status_code, 302)
-        self.assertEqual(second.status_code, 403)
+        self.assertEqual(second.status_code, 302)
+        self.assertNotEqual(first_query["state"], second_query["state"])
+        self.assertEqual(before[0], after_preview[0])
+        self.assertEqual(after_preview[1], before[1] + 1)
+        self.assertTrue(verification.get_json()["valid"])
+        self.assertEqual(self.transport.calls, [])
+
+    def test_only_one_callback_can_claim_invitation_at_a_time(self):
+        store = self.app.extensions["instagram_oauth_store"]
+        invitation = store.create_setup_invitation()
+        first_state = store.create_oauth_state(invitation["setup_token"])
+        second_state = store.create_oauth_state(invitation["setup_token"])
+
+        invitation_id = store.consume_state(first_state)
+
+        self.assertEqual(invitation_id, invitation["id"])
+        self.assertIsNone(store.consume_state(second_state))
+        self.assertTrue(store.release_invitation_claim(invitation_id))
+        self.assertEqual(store.consume_state(second_state), invitation["id"])
 
     def test_callback_rejects_invalid_state_without_exchange(self):
         response = self._callback("wrong-state")
@@ -440,7 +466,8 @@ class InstagramOAuthTestCase(unittest.TestCase):
         )
 
     def test_provider_error_and_transport_failure_are_safe(self):
-        _, query = self._connect()
+        setup_url, _ = self._create_invitation()
+        _, query = self._connect(setup_url)
         provider_message = "provider-secret-error-description"
         provider_response = self.public_client.get(
             "/instagram/callback",
@@ -452,6 +479,9 @@ class InstagramOAuthTestCase(unittest.TestCase):
         )
         self.assertEqual(provider_response.status_code, 400)
         self.assertNotIn(provider_message, provider_response.get_data(as_text=True))
+        retry, retry_query = self._connect(setup_url)
+        self.assertEqual(retry.status_code, 302)
+        self.assertNotEqual(query["state"], retry_query["state"])
 
         leaked_error = RuntimeError(
             f"{APP_SECRET} {AUTHORIZATION_CODE} {SHORT_TOKEN}"

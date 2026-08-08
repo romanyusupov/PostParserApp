@@ -121,7 +121,7 @@ class InstagramOAuthInvitationStore:
             "expires_at": _timestamp(expires_at),
         }
 
-    def claim_setup_token(
+    def create_oauth_state(
         self,
         setup_token: Any,
         *,
@@ -132,8 +132,8 @@ class InstagramOAuthInvitationStore:
         if not normalized_token:
             return None
 
-        claimed_at = _normalized_now(now)
-        state_expires_at = claimed_at + datetime.timedelta(
+        created_at = _normalized_now(now)
+        state_expires_at = created_at + datetime.timedelta(
             seconds=state_ttl_seconds
         )
         oauth_state = secrets.token_urlsafe(OAUTH_STATE_BYTES)
@@ -146,12 +146,11 @@ class InstagramOAuthInvitationStore:
                 FROM instagram_oauth_invitations
                 WHERE token_hash = ?
                   AND expires_at > ?
-                  AND claimed_at = ''
                   AND used_at = ''
                 """,
                 (
                     _token_hash(normalized_token),
-                    _timestamp(claimed_at),
+                    _timestamp(created_at),
                 ),
             ).fetchone()
             if invitation is None:
@@ -159,18 +158,6 @@ class InstagramOAuthInvitationStore:
                 return None
 
             invitation_id = int(invitation["id"])
-            updated = connection.execute(
-                """
-                UPDATE instagram_oauth_invitations
-                SET claimed_at = ?
-                WHERE id = ? AND claimed_at = '' AND used_at = ''
-                """,
-                (_timestamp(claimed_at), invitation_id),
-            )
-            if updated.rowcount != 1:
-                connection.rollback()
-                return None
-
             connection.execute(
                 """
                 INSERT INTO instagram_oauth_states (
@@ -183,7 +170,7 @@ class InstagramOAuthInvitationStore:
                 (
                     _token_hash(oauth_state),
                     invitation_id,
-                    _timestamp(claimed_at),
+                    _timestamp(created_at),
                     _timestamp(state_expires_at),
                 ),
             )
@@ -213,7 +200,6 @@ class InstagramOAuthInvitationStore:
                 FROM instagram_oauth_invitations
                 WHERE token_hash = ?
                   AND expires_at > ?
-                  AND claimed_at = ''
                   AND used_at = ''
                 """,
                 (
@@ -236,6 +222,9 @@ class InstagramOAuthInvitationStore:
             return None
 
         consumed_at = _normalized_now(now)
+        stale_claim_before = consumed_at - datetime.timedelta(
+            seconds=OAUTH_STATE_TTL_SECONDS
+        )
         connection = self._connect()
         try:
             connection.execute("BEGIN IMMEDIATE")
@@ -259,6 +248,24 @@ class InstagramOAuthInvitationStore:
                 connection.rollback()
                 return None
 
+            claimed = connection.execute(
+                """
+                UPDATE instagram_oauth_invitations
+                SET claimed_at = ?
+                WHERE id = ?
+                  AND used_at = ''
+                  AND (claimed_at = '' OR claimed_at <= ?)
+                """,
+                (
+                    _timestamp(consumed_at),
+                    int(row["invitation_id"]),
+                    _timestamp(stale_claim_before),
+                ),
+            )
+            if claimed.rowcount != 1:
+                connection.rollback()
+                return None
+
             updated = connection.execute(
                 """
                 UPDATE instagram_oauth_states
@@ -272,6 +279,29 @@ class InstagramOAuthInvitationStore:
                 return None
             connection.commit()
             return int(row["invitation_id"])
+        finally:
+            connection.close()
+
+    def release_invitation_claim(self, invitation_id: Any) -> bool:
+        try:
+            normalized_id = int(invitation_id)
+        except (TypeError, ValueError):
+            return False
+        if normalized_id <= 0:
+            return False
+
+        connection = self._connect()
+        try:
+            cursor = connection.execute(
+                """
+                UPDATE instagram_oauth_invitations
+                SET claimed_at = ''
+                WHERE id = ? AND used_at = '' AND claimed_at != ''
+                """,
+                (normalized_id,),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
         finally:
             connection.close()
 
