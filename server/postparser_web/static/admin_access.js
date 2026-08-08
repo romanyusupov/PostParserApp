@@ -160,7 +160,47 @@
         await navigator.clipboard.writeText(payload.setup_url);
         copy.textContent = "Скопировано";
       });
-      generatedInstagramOAuthLink.append(link, copy);
+      const expires = element("p", "", "Срок действия: 48 часов");
+      const status = element("p", "", "Статус: Не использована");
+      const verification = element("p", "instagram-oauth-verification", "");
+      const verify = element(
+        "button",
+        "button button-secondary",
+        "Проверить ссылку"
+      );
+      verify.type = "button";
+      verify.addEventListener("click", async function () {
+        verify.disabled = true;
+        verification.textContent = "";
+        try {
+          const parsedUrl = new URL(payload.setup_url);
+          const verificationPayload = await request(
+            "/api/v1/admin/instagram/oauth-invitations/verify",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                setup_token: parsedUrl.searchParams.get("setup_token") || "",
+              }),
+            }
+          );
+          verification.textContent = verificationPayload.valid
+            ? "✓ Ссылка готова для отправки владельцу Instagram"
+            : "Ссылка недействительна";
+        } catch (error) {
+          verification.textContent = "Ссылка недействительна";
+        } finally {
+          verify.disabled = false;
+        }
+      });
+      generatedInstagramOAuthLink.append(
+        link,
+        expires,
+        status,
+        copy,
+        verify,
+        verification
+      );
       generatedInstagramOAuthLink.hidden = false;
     } catch (error) {
       generatedInstagramOAuthLink.textContent = error.message;

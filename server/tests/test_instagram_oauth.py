@@ -2,6 +2,7 @@ import datetime
 import os
 import pathlib
 import re
+import sqlite3
 import stat
 import tempfile
 import unittest
@@ -14,7 +15,11 @@ from server.postparser_web.instagram_oauth import (
     INSTAGRAM_LONG_TOKEN_URL,
     INSTAGRAM_OAUTH_SCOPES,
     INSTAGRAM_PROFILE_URL,
+    INSTAGRAM_REDIRECT_URI,
     INSTAGRAM_TOKEN_URL,
+)
+from server.postparser_web.instagram_oauth_store import (
+    SETUP_TOKEN_TTL_SECONDS,
 )
 from server.postparser_web.instagram_token_store import (
     INSTAGRAM_ACCESS_TOKEN_ENVIRONMENT_VARIABLE,
@@ -33,7 +38,7 @@ FORBIDDEN_SCOPES = [
 ]
 APP_ID = "test-instagram-app-id"
 APP_SECRET = "test-instagram-app-secret"
-REDIRECT_URI = "https://example.test/instagram/callback"
+REDIRECT_URI = "https://tg-parser.proactivum.ru/instagram/callback"
 ADMIN_PASSWORD = "test-admin-password"
 AUTHORIZATION_CODE = "test-authorization-code"
 SHORT_TOKEN = "test-short-access-token"
@@ -147,6 +152,24 @@ class InstagramOAuthTestCase(unittest.TestCase):
         setup_token = urllib.parse.parse_qs(parsed.query)["setup_token"][0]
         return setup_url, setup_token
 
+    def _oauth_database_snapshot(self):
+        connection = sqlite3.connect(self.access_path)
+        try:
+            invitation = connection.execute(
+                """
+                SELECT token_hash, created_at, expires_at, claimed_at, used_at
+                FROM instagram_oauth_invitations
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            ).fetchone()
+            state_count = connection.execute(
+                "SELECT COUNT(*) FROM instagram_oauth_states"
+            ).fetchone()[0]
+            return invitation, state_count
+        finally:
+            connection.close()
+
     def _connect(self, setup_url=None):
         if setup_url is None:
             setup_url, _ = self._create_invitation()
@@ -188,6 +211,37 @@ class InstagramOAuthTestCase(unittest.TestCase):
         page = self.admin_client.get("/admin/access").get_data(as_text=True)
         self.assertNotIn(setup_token, page)
 
+    def test_setup_token_default_ttl_is_exactly_48_hours(self):
+        self._create_invitation()
+        invitation, _ = self._oauth_database_snapshot()
+        created_at = datetime.datetime.fromisoformat(invitation[1])
+        expires_at = datetime.datetime.fromisoformat(invitation[2])
+
+        self.assertEqual(SETUP_TOKEN_TTL_SECONDS, 172800)
+        self.assertEqual(
+            expires_at - created_at,
+            datetime.timedelta(hours=48),
+        )
+
+    def test_admin_page_describes_one_time_instagram_link(self):
+        page = self.admin_client.get("/admin/access").get_data(as_text=True)
+        script = (
+            pathlib.Path(__file__).parents[1]
+            / "postparser_web"
+            / "static"
+            / "admin_access.js"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("setup_token", page)
+        self.assertIn("48 часов", page)
+        self.assertIn("Срок действия: 48 часов", script)
+        self.assertIn("Статус: Не использована", script)
+        self.assertIn("Проверить ссылку", script)
+        self.assertIn(
+            "✓ Ссылка готова для отправки владельцу Instagram",
+            script,
+        )
+
     def test_regular_user_cannot_create_oauth_link(self):
         user = self.app.extensions["access_store"].create_user()
         client = self.app.test_client()
@@ -200,6 +254,78 @@ class InstagramOAuthTestCase(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 403)
+
+    def test_regular_user_cannot_verify_oauth_link(self):
+        _, setup_token = self._create_invitation()
+        user = self.app.extensions["access_store"].create_user()
+        client = self.app.test_client()
+        self._login(client, user["access_code"])
+
+        response = client.post(
+            "/api/v1/admin/instagram/oauth-invitations/verify",
+            json={"setup_token": setup_token},
+            headers=self._csrf_headers(client),
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_verification_does_not_consume_or_change_invitation(self):
+        setup_url, setup_token = self._create_invitation()
+        before = self._oauth_database_snapshot()
+
+        with mock.patch(
+            "server.postparser_web.instagram_oauth.secrets.token_urlsafe",
+            return_value="read-only-preview-state",
+        ) as state_generator:
+            response = self.admin_client.post(
+                "/api/v1/admin/instagram/oauth-invitations/verify",
+                json={"setup_token": setup_token},
+                headers=self._csrf_headers(),
+            )
+        after = self._oauth_database_snapshot()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["valid"])
+        self.assertEqual(
+            response.get_json()["message"],
+            "Ссылка готова для передачи владельцу Instagram",
+        )
+        self.assertEqual(before, after)
+        state_generator.assert_called_once_with(32)
+        self.assertEqual(self.transport.calls, [])
+        connect_response, query = self._connect(setup_url)
+        self.assertEqual(connect_response.status_code, 302)
+        self.assertTrue(query["state"][0])
+
+    def test_verification_rejects_invalid_expired_and_claimed_tokens(self):
+        invalid = self.admin_client.post(
+            "/api/v1/admin/instagram/oauth-invitations/verify",
+            json={"setup_token": "wrong-token"},
+            headers=self._csrf_headers(),
+        )
+        expired_invitation = self.app.extensions[
+            "instagram_oauth_store"
+        ].create_setup_invitation(ttl_seconds=-1)
+        expired = self.admin_client.post(
+            "/api/v1/admin/instagram/oauth-invitations/verify",
+            json={"setup_token": expired_invitation["setup_token"]},
+            headers=self._csrf_headers(),
+        )
+        setup_url, setup_token = self._create_invitation()
+        self._connect(setup_url)
+        claimed = self.admin_client.post(
+            "/api/v1/admin/instagram/oauth-invitations/verify",
+            json={"setup_token": setup_token},
+            headers=self._csrf_headers(),
+        )
+
+        for response in (invalid, expired, claimed):
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(response.get_json()["valid"])
+            self.assertEqual(
+                response.get_json()["message"],
+                "Ссылка недействительна",
+            )
 
     def test_connect_without_or_with_wrong_token_is_forbidden(self):
         missing = self.public_client.get("/instagram/connect")
@@ -219,6 +345,7 @@ class InstagramOAuthTestCase(unittest.TestCase):
         self.assertTrue(response.location.startswith(INSTAGRAM_AUTHORIZATION_URL))
         self.assertEqual(query["client_id"], [APP_ID])
         self.assertEqual(query["redirect_uri"], [REDIRECT_URI])
+        self.assertEqual(REDIRECT_URI, INSTAGRAM_REDIRECT_URI)
         self.assertEqual(query["scope"][0].split(","), EXPECTED_SCOPES)
         self.assertEqual(list(INSTAGRAM_OAUTH_SCOPES), EXPECTED_SCOPES)
         self.assertTrue(query["state"][0])
@@ -273,6 +400,17 @@ class InstagramOAuthTestCase(unittest.TestCase):
         )
         if os.name != "nt":
             self.assertEqual(stat.S_IMODE(self.token_path.stat().st_mode), 0o600)
+
+    def test_used_setup_token_is_forbidden(self):
+        setup_url, _ = self._create_invitation()
+        response, query = self._connect(setup_url)
+        self.assertEqual(response.status_code, 302)
+        callback = self._callback(query["state"][0])
+        self.assertEqual(callback.status_code, 200)
+
+        reused, _ = self._connect(setup_url)
+
+        self.assertEqual(reused.status_code, 403)
 
     def test_arbitrary_business_account_is_rejected(self):
         self.transport.profile_id = "arbitrary-business-account"

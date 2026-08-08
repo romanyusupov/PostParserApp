@@ -21,6 +21,7 @@ INSTAGRAM_OAUTH_SCOPES = (
     "instagram_business_manage_insights",
 )
 INSTAGRAM_AUTHORIZATION_URL = "https://www.instagram.com/oauth/authorize"
+INSTAGRAM_REDIRECT_URI = "https://tg-parser.proactivum.ru/instagram/callback"
 INSTAGRAM_TOKEN_URL = "https://api.instagram.com/oauth/access_token"
 INSTAGRAM_LONG_TOKEN_URL = "https://graph.instagram.com/access_token"
 INSTAGRAM_PROFILE_URL = "https://graph.instagram.com/v22.0/me"
@@ -57,8 +58,60 @@ def _oauth_configuration(require_secret: bool = False) -> dict[str, str]:
 
     if any(not configuration[name] for name in required_names):
         raise InstagramOAuthError("Instagram OAuth не настроен.")
+    if configuration["redirect_uri"] != INSTAGRAM_REDIRECT_URI:
+        raise InstagramOAuthError("Instagram OAuth не настроен.")
 
     return configuration
+
+
+def build_instagram_authorization_url(
+    configuration: dict[str, str],
+    oauth_state: str,
+) -> str:
+    return INSTAGRAM_AUTHORIZATION_URL + "?" + urllib.parse.urlencode(
+        {
+            "client_id": configuration["app_id"],
+            "redirect_uri": configuration["redirect_uri"],
+            "response_type": "code",
+            "scope": ",".join(INSTAGRAM_OAUTH_SCOPES),
+            "state": oauth_state,
+        }
+    )
+
+
+def instagram_setup_link_is_ready(setup_token: Any) -> bool:
+    """Проверяет setup-ссылку без записи state и обращения к Meta."""
+    route_available = any(
+        rule.endpoint == "instagram_oauth.instagram_connect"
+        and "GET" in rule.methods
+        for rule in current_app.url_map.iter_rules()
+    )
+    if not route_available:
+        return False
+    if not _invitation_store().is_setup_token_valid(setup_token):
+        return False
+
+    try:
+        configuration = _oauth_configuration()
+    except InstagramOAuthError:
+        return False
+
+    preview_state = secrets.token_urlsafe(32)
+    authorization_url = build_instagram_authorization_url(
+        configuration,
+        preview_state,
+    )
+    parsed = urllib.parse.urlparse(authorization_url)
+    parameters = urllib.parse.parse_qs(parsed.query)
+    return (
+        f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+        == INSTAGRAM_AUTHORIZATION_URL
+        and parameters.get("client_id") == [configuration["app_id"]]
+        and parameters.get("redirect_uri") == [INSTAGRAM_REDIRECT_URI]
+        and parameters.get("response_type") == ["code"]
+        and parameters.get("scope") == [",".join(INSTAGRAM_OAUTH_SCOPES)]
+        and parameters.get("state") == [preview_state]
+    )
 
 
 def _default_oauth_transport(
@@ -178,14 +231,9 @@ def instagram_connect():
             403,
         )
 
-    authorization_url = INSTAGRAM_AUTHORIZATION_URL + "?" + urllib.parse.urlencode(
-        {
-            "client_id": configuration["app_id"],
-            "redirect_uri": configuration["redirect_uri"],
-            "response_type": "code",
-            "scope": ",".join(INSTAGRAM_OAUTH_SCOPES),
-            "state": oauth_state,
-        }
+    authorization_url = build_instagram_authorization_url(
+        configuration,
+        oauth_state,
     )
     response = redirect(authorization_url)
     response.headers["Cache-Control"] = "no-store"

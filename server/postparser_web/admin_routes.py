@@ -4,6 +4,9 @@ import urllib.parse
 from flask import Blueprint, current_app, jsonify, render_template, request
 
 from server.postparser_web.authentication import admin_required
+from server.postparser_web.instagram_oauth import (
+    instagram_setup_link_is_ready,
+)
 
 
 admin_bp = Blueprint("admin", __name__)
@@ -53,6 +56,28 @@ def create_instagram_oauth_invitation():
             "expires_at": invitation["expires_at"],
         }
     ), 201
+
+
+@admin_bp.post("/api/v1/admin/instagram/oauth-invitations/verify")
+@admin_required
+def verify_instagram_oauth_invitation():
+    payload = request.get_json(silent=True)
+    setup_token = ""
+    if isinstance(payload, dict):
+        setup_token = str(payload.get("setup_token") or "").strip()
+
+    valid = instagram_setup_link_is_ready(setup_token)
+    return jsonify(
+        {
+            "success": True,
+            "valid": valid,
+            "message": (
+                "Ссылка готова для передачи владельцу Instagram"
+                if valid
+                else "Ссылка недействительна"
+            ),
+        }
+    )
 
 
 @admin_bp.patch("/api/v1/admin/users/<int:user_id>")

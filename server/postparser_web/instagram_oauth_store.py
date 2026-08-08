@@ -7,7 +7,7 @@ from typing import Any
 
 
 SETUP_TOKEN_BYTES = 32
-SETUP_TOKEN_TTL_SECONDS = 15 * 60
+SETUP_TOKEN_TTL_SECONDS = 48 * 60 * 60
 OAUTH_STATE_BYTES = 32
 OAUTH_STATE_TTL_SECONDS = 15 * 60
 
@@ -192,6 +192,38 @@ class InstagramOAuthInvitationStore:
             connection.close()
 
         return oauth_state
+
+    def is_setup_token_valid(
+        self,
+        setup_token: Any,
+        *,
+        now: Any = None,
+    ) -> bool:
+        """Проверяет приглашение без изменения его состояния."""
+        normalized_token = str(setup_token or "").strip()
+        if not normalized_token:
+            return False
+
+        checked_at = _normalized_now(now)
+        connection = self._connect()
+        try:
+            invitation = connection.execute(
+                """
+                SELECT 1
+                FROM instagram_oauth_invitations
+                WHERE token_hash = ?
+                  AND expires_at > ?
+                  AND claimed_at = ''
+                  AND used_at = ''
+                """,
+                (
+                    _token_hash(normalized_token),
+                    _timestamp(checked_at),
+                ),
+            ).fetchone()
+            return invitation is not None
+        finally:
+            connection.close()
 
     def consume_state(
         self,
