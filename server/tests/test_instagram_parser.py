@@ -14,6 +14,7 @@ from server.postparser_web.instagram_parser import (
     InstagramParserError,
     _default_transport,
     normalize_instagram_post,
+    parse_instagram_timestamp,
 )
 
 
@@ -126,6 +127,55 @@ class InstagramParserConfigurationTestCase(unittest.TestCase):
             with self.subTest(token=token):
                 with self.assertRaises(InstagramConfigurationError):
                     InstagramParser(token)
+
+
+class InstagramTimestampTestCase(unittest.TestCase):
+    def test_compact_utc_offset_is_supported(self):
+        result = parse_instagram_timestamp("2026-08-10T12:34:56+0000")
+
+        self.assertEqual(
+            result,
+            datetime.datetime(
+                2026, 8, 10, 12, 34, 56, tzinfo=datetime.timezone.utc
+            ),
+        )
+
+    def test_colon_utc_offset_remains_supported(self):
+        result = parse_instagram_timestamp("2026-08-10T12:34:56+00:00")
+
+        self.assertEqual(
+            result,
+            datetime.datetime(
+                2026, 8, 10, 12, 34, 56, tzinfo=datetime.timezone.utc
+            ),
+        )
+
+    def test_z_suffix_remains_supported(self):
+        result = parse_instagram_timestamp("2026-08-10T12:34:56Z")
+
+        self.assertEqual(
+            result,
+            datetime.datetime(
+                2026, 8, 10, 12, 34, 56, tzinfo=datetime.timezone.utc
+            ),
+        )
+
+    def test_non_utc_offset_is_converted_to_utc(self):
+        result = parse_instagram_timestamp("2026-08-10T12:34:56+0430")
+
+        self.assertEqual(
+            result,
+            datetime.datetime(
+                2026, 8, 10, 8, 4, 56, tzinfo=datetime.timezone.utc
+            ),
+        )
+
+    def test_invalid_timestamp_is_rejected(self):
+        with self.assertRaisesRegex(
+            InstagramParserError,
+            "Instagram вернул публикацию с некорректной датой",
+        ):
+            parse_instagram_timestamp("not-a-timestamp")
 
 
 class InstagramPostNormalizationTestCase(unittest.TestCase):
@@ -497,19 +547,19 @@ class InstagramPaginationTestCase(unittest.TestCase):
             "data": [
                 make_media(
                     "start",
-                    timestamp="2026-07-01T00:00:00+00:00",
+                    timestamp="2026-07-01T00:00:00+0000",
                 ),
                 make_media(
                     "end",
-                    timestamp="2026-07-31T23:59:59+00:00",
+                    timestamp="2026-07-31T23:59:59+0000",
                 ),
                 make_media(
                     "before",
-                    timestamp="2026-06-30T23:59:59+00:00",
+                    timestamp="2026-06-30T23:59:59+0000",
                 ),
                 make_media(
                     "after",
-                    timestamp="2026-08-01T00:00:00+00:00",
+                    timestamp="2026-08-01T00:00:00+0000",
                 ),
             ]
         }

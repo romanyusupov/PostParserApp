@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import re
 import urllib.parse
 import urllib.error
 import urllib.request
@@ -99,6 +100,15 @@ def parse_instagram_timestamp(value: Any) -> datetime.datetime:
 
     if normalized.endswith("Z"):
         normalized = normalized[:-1] + "+00:00"
+
+    compact_offset = re.search(r"([+-]\d{2})(\d{2})$", normalized)
+    if compact_offset:
+        normalized = (
+            normalized[: compact_offset.start()]
+            + compact_offset.group(1)
+            + ":"
+            + compact_offset.group(2)
+        )
 
     try:
         published_at = datetime.datetime.fromisoformat(normalized)
