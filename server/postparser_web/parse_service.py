@@ -10,6 +10,9 @@ from server.postparser_web.instagram_parser import (
     InstagramParser,
     InstagramParserError,
 )
+from server.postparser_web.instagram_identifier import (
+    normalize_instagram_identifier,
+)
 from server.postparser_web.instagram_token_store import (
     INSTAGRAM_ACCESS_TOKEN_ENVIRONMENT_VARIABLE,
     InstagramTokenStorageError,
@@ -348,9 +351,19 @@ class ParseService:
                 raise ParseConfigurationError(
                     "Разрешённый Instagram Business аккаунт не настроен."
                 )
-            if not hmac.compare_digest(
-                group_url.casefold(),
-                self._allowed_instagram_account.casefold(),
+            normalized_group_account = normalize_instagram_identifier(
+                group_url
+            )
+            normalized_allowed_account = normalize_instagram_identifier(
+                self._allowed_instagram_account
+            )
+            if not (
+                normalized_group_account
+                and normalized_allowed_account
+                and hmac.compare_digest(
+                    normalized_group_account,
+                    normalized_allowed_account,
+                )
             ):
                 raise ParseConfigurationError(
                     "Для Instagram разрешён только подключённый Business аккаунт."

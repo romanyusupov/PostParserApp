@@ -115,6 +115,65 @@ class ParseServiceSelectionTestCase(unittest.TestCase):
         self.assertEqual(factories["instagram"].calls, 1)
         self.assertEqual(len(parser.fetch_calls), 1)
 
+    def test_instagram_profile_forms_match_username_allowlist(self):
+        for group_url in (
+            "proactivum",
+            "@proactivum",
+            "https://instagram.com/proactivum",
+            "https://instagram.com/proactivum/",
+            "https://www.instagram.com/proactivum",
+            "https://www.instagram.com/proactivum/",
+            "https://www.instagram.com/proactivum/?hl=ru",
+        ):
+            with self.subTest(group_url=group_url):
+                group = make_group(network="instagram", url=group_url)
+                parser = FakeParser()
+                service = ParseService(
+                    FakeSettingsStore([group]),
+                    parser_factories={
+                        "instagram": RecordingFactory(parser)
+                    },
+                    allowed_instagram_account="proactivum",
+                )
+
+                service.parse_group("group_1")
+
+                self.assertEqual(len(parser.fetch_calls), 1)
+
+    def test_instagram_rejects_unsafe_urls_and_other_username(self):
+        for group_url in (
+            "another.username",
+            "https://evil.instagram.com/proactivum/",
+            "https://instagram.com.evil.com/proactivum/",
+            "https://www.instagram.com/p/post-id/",
+            "https://www.instagram.com/reel/reel-id/",
+            "https://www.instagram.com/proactivum/extra",
+        ):
+            with self.subTest(group_url=group_url):
+                parser = FakeParser()
+                service = ParseService(
+                    FakeSettingsStore(
+                        [make_group(network="instagram", url=group_url)]
+                    ),
+                    parser_factories={
+                        "instagram": RecordingFactory(parser)
+                    },
+                    allowed_instagram_account="proactivum",
+                )
+
+                with self.assertRaises(ParseConfigurationError):
+                    service.parse_group("group_1")
+
+                self.assertEqual(parser.fetch_calls, [])
+
+    def test_instagram_numeric_account_id_keeps_existing_matching(self):
+        group = make_group(network="instagram", url="123456789")
+        service, parser, _ = make_service(group)
+
+        service.parse_group("group_1")
+
+        self.assertEqual(len(parser.fetch_calls), 1)
+
     def test_instagram_rejects_arbitrary_account_server_side(self):
         group = make_group(network="instagram", url="arbitrary-account")
         parser = FakeParser()
@@ -383,6 +442,11 @@ class ParseServiceResultTestCase(unittest.TestCase):
                 service, _, _ = make_service(
                     make_group(
                         network=network,
+                        url=(
+                            "instagram_target"
+                            if network == "instagram"
+                            else "https://example.test/group"
+                        ),
                         advertising_types=advertising_types,
                     ),
                     parser=parser,
@@ -581,7 +645,7 @@ class ParseServiceResultTestCase(unittest.TestCase):
             warning=warning,
         )
         service, _, _ = make_service(
-            make_group(network="instagram"),
+            make_group(network="instagram", url="instagram_target"),
             parser=parser,
         )
 

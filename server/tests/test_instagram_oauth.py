@@ -21,6 +21,7 @@ from server.postparser_web.instagram_oauth import (
     INSTAGRAM_REDIRECT_URI,
     INSTAGRAM_TOKEN_URL,
     InstagramOAuthTransportError,
+    _connected_account_is_allowed,
     _default_oauth_transport,
 )
 from server.postparser_web.instagram_oauth_store import (
@@ -559,6 +560,38 @@ class InstagramOAuthTestCase(unittest.TestCase):
             load_instagram_access_token(self.token_path),
             LONG_TOKEN,
         )
+
+    def test_profile_url_allowlist_matches_connected_username(self):
+        profile = {
+            "id": "987654321",
+            "user_id": "987654321",
+            "username": "PROACTIVUM",
+        }
+        for allowed_value in (
+            "@proactivum",
+            "https://instagram.com/proactivum/",
+            "https://www.instagram.com/proactivum/?hl=ru",
+        ):
+            with self.subTest(allowed_value=allowed_value), mock.patch.dict(
+                os.environ,
+                {"POSTPARSER_INSTAGRAM_ACCOUNT_ID": allowed_value},
+            ):
+                self.assertTrue(_connected_account_is_allowed(profile))
+
+    def test_numeric_allowlist_is_not_matched_as_username(self):
+        with mock.patch.dict(
+            os.environ,
+            {"POSTPARSER_INSTAGRAM_ACCOUNT_ID": "123456789"},
+        ):
+            self.assertFalse(
+                _connected_account_is_allowed(
+                    {
+                        "id": "987654321",
+                        "user_id": "987654321",
+                        "username": "123456789",
+                    }
+                )
+            )
 
     def test_provider_error_and_transport_failure_are_safe(self):
         setup_url, _ = self._create_invitation()

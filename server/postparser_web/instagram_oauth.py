@@ -12,6 +12,9 @@ from server.postparser_web.instagram_token_store import (
     InstagramTokenStorageError,
     save_instagram_access_token,
 )
+from server.postparser_web.instagram_identifier import (
+    normalize_instagram_identifier,
+)
 
 
 INSTAGRAM_APP_ID_ENVIRONMENT_VARIABLE = "INSTAGRAM_APP_ID"
@@ -394,9 +397,10 @@ def _connected_account_is_allowed(profile: Any) -> bool:
     if allowed_account_id.isdecimal():
         return False
 
-    allowed_username = allowed_account_id.removeprefix("@").casefold()
-    connected_username = str(profile.get("username") or "").strip()
-    connected_username = connected_username.removeprefix("@").casefold()
+    allowed_username = normalize_instagram_identifier(allowed_account_id)
+    connected_username = normalize_instagram_identifier(
+        profile.get("username")
+    )
     return bool(
         allowed_username
         and connected_username
