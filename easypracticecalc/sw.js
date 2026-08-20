@@ -1,8 +1,10 @@
 const CACHE_PREFIX = 'easypracticecalc-';
-const CACHE_NAME = `${CACHE_PREFIX}2026-08-18-v2`;
+const CACHE_NAME = `${CACHE_PREFIX}2026-08-20-v3`;
 const ASSETS = [
   './',
   './index.html',
+  './timer_logic.js',
+  './timer.js',
   './manifest.webmanifest',
   './icon-180.png',
   './icon-192.png',

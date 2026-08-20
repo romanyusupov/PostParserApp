@@ -44,6 +44,31 @@ select{
   margin-top:25px;background:#eca54e;color:#251307;border-radius:15px;padding:20px;
   font-size:24px;font-weight:700;line-height:1.35
 }
+.timer-card{
+  margin-top:28px;padding:24px;border:1px solid rgba(231,160,77,.45);border-radius:18px;
+  background:#321d10;text-align:center
+}
+.timer-heading{margin:0 0 3px;color:#f0b56d;font-size:17px;font-weight:600}
+.timer-status{min-height:24px;margin:0 0 14px;color:#f4d4ae;font-size:15px}
+.timer-circle{position:relative;width:220px;height:220px;margin:0 auto}
+.timer-circle svg{width:100%;height:100%;transform:rotate(-90deg)}
+.timer-track,.timer-progress{fill:none;stroke-width:12}
+.timer-track{stroke:rgba(255,255,255,.12)}
+.timer-progress{stroke:#eca54e;stroke-linecap:round;transition:stroke-dashoffset .25s linear}
+.timer-center{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.timer-time{font-size:32px;font-weight:750;letter-spacing:.03em;font-variant-numeric:tabular-nums}
+.timer-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:18px}
+.timer-button{
+  min-width:118px;border:1px solid #d28a40;border-radius:12px;padding:12px 18px;
+  background:#eca54e;color:#251307;font:inherit;font-weight:700;cursor:pointer
+}
+.timer-button.secondary{background:transparent;color:#f0b56d}
+.timer-button[hidden]{display:none}
+.layer-progress{display:flex;justify-content:center;gap:9px;margin-top:25px;overflow-x:auto;padding:3px}
+.layer-step{display:flex;min-width:70px;flex-direction:column;align-items:center;gap:6px;color:#b8977d;font-size:13px}
+.layer-marker{display:grid;width:34px;height:34px;place-items:center;border:2px solid #775136;border-radius:50%;font-weight:750}
+.layer-step.current{color:#f4d4ae}.layer-step.current .layer-marker{border-color:#eca54e;background:#eca54e;color:#251307}
+.layer-step.complete{color:#f0b56d}.layer-step.complete .layer-marker{border-color:#d28a40;background:#5a341c}
 @media(max-width:600px){
   body{padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
   .card{padding:20px 16px;border-radius:18px}
@@ -51,14 +76,19 @@ select{
   .tab{flex:1;text-align:center;padding:13px 8px;font-size:15px}
   .controls{gap:14px}
   .result{font-size:21px}
+  .timer-card{padding:20px 10px}
+  .timer-circle{width:190px;height:190px}
+  .timer-time{font-size:27px}
+  .timer-button{min-width:100px;flex:1 1 120px}
+  .layer-progress{justify-content:flex-start}
 }
 </style>
 </head>
 <body>
 <div class="card">
   <div class="tabs">
-    <div class="tab active" onclick="openTab('water',this)">Вода</div>
-    <div class="tab" onclick="openTab('move',this)">Ходьба/бег</div>
+    <div class="tab active" data-practice="water" onclick="openTab('water',this)">Вода</div>
+    <div class="tab" data-practice="move" onclick="openTab('move',this)">Ходьба/бег</div>
   </div>
 
   <div id="water" class="panel active">
@@ -76,6 +106,25 @@ select{
     </div>
     <div class="result" id="moveResult"></div>
   </div>
+
+  <section class="timer-card" id="timerCard" aria-labelledby="timerPractice">
+    <h2 class="timer-heading" id="timerPractice">Вода</h2>
+    <p class="timer-status" id="timerStatus" aria-live="polite">Готово к запуску</p>
+    <div class="timer-circle">
+      <svg viewBox="0 0 220 220" aria-hidden="true">
+        <circle class="timer-track" cx="110" cy="110" r="94"></circle>
+        <circle class="timer-progress" id="timerProgress" cx="110" cy="110" r="94"></circle>
+      </svg>
+      <div class="timer-center"><time class="timer-time" id="timerTime">00:00:00</time></div>
+    </div>
+    <div class="timer-actions">
+      <button class="timer-button" id="timerStart" type="button">Начать</button>
+      <button class="timer-button" id="timerPause" type="button" hidden>Пауза</button>
+      <button class="timer-button" id="timerResume" type="button" hidden>Продолжить</button>
+      <button class="timer-button secondary" id="timerReset" type="button" hidden>Сбросить</button>
+    </div>
+    <div class="layer-progress" id="layerProgress" aria-label="Прогресс по слоям"></div>
+  </section>
 </div>
 
 <script>
@@ -128,5 +177,7 @@ if ('serviceWorker' in navigator) {
   });
 }
 </script>
+<script src="./timer_logic.js"></script>
+<script src="./timer.js"></script>
 </body>
 </html>
