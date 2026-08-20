@@ -27,8 +27,12 @@ test('Production water and movement formula fixtures are unchanged', () => {
   assert.equal(Math.round(moveData['10.0']['5'] * 60), 5568);
 });
 
-test('Timer controls, circular progress and layer progress are rendered', () => {
-  for (const id of ['timerStart', 'timerPause', 'timerResume', 'timerReset', 'timerProgress', 'layerProgress']) {
+test('Timer, sequential segment controls and progress are rendered', () => {
+  for (const id of [
+    'timerStart', 'timerPause', 'timerResume', 'timerReset', 'timerNext',
+    'timerCumulative', 'timerProgress', 'layerProgress', 'segmentHistory',
+    'segmentWarning', 'segmentWarningClose'
+  ]) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
   assert.match(html, /\.timer-circle/);
@@ -37,16 +41,21 @@ test('Timer controls, circular progress and layer progress are rendered', () => 
   assert.match(timerUi, /layer <= 5/);
   assert.match(timerUi, /className = 'layer-track'/);
   assert.match(timerUi, /className = 'layer-fill'/);
+  assert.match(html, /\+ Следующий отрезок/);
+  assert.match(html, /Чтобы начать следующий отрезок, завершите текущий с теми же параметрами\./);
+  assert.match(timerUi, /textContent = '✓'/);
+  assert.doesNotMatch(timerUi, /interrupted|✕/);
 });
 
 test('Timer persistence is standalone and does not depend on a network API', () => {
   assert.match(timerLogic, /easypracticecalc\.timerState\.v1/);
+  assert.match(timerLogic, /easypracticecalc\.workoutSession\.v2/);
   assert.doesNotMatch(timerLogic + timerUi, /\bfetch\s*\(|XMLHttpRequest|WebSocket/);
 });
 
 test('Service worker pre-caches timer assets within its existing safe scope logic', () => {
   assert.match(serviceWorker, /CACHE_PREFIX = 'easypracticecalc-'/);
-  assert.match(serviceWorker, /2026-08-20-v4/);
+  assert.match(serviceWorker, /2026-08-20-v5/);
   assert.match(serviceWorker, /'\.\/timer_logic\.js'/);
   assert.match(serviceWorker, /'\.\/timer\.js'/);
   assert.match(serviceWorker, /requestUrl\.origin !== self\.location\.origin/);
