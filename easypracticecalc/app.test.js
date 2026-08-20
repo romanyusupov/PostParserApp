@@ -31,7 +31,8 @@ test('Timer, sequential segment controls and progress are rendered', () => {
   for (const id of [
     'timerStart', 'timerPause', 'timerResume', 'timerReset', 'timerNext',
     'timerCumulative', 'timerProgress', 'layerProgress', 'segmentHistory',
-    'segmentWarning', 'segmentWarningClose'
+    'segmentWarning', 'segmentWarningClose', 'practiceParameters',
+    'parameterToggle', 'parameterPanel', 'parameterSummary'
   ]) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
@@ -45,6 +46,12 @@ test('Timer, sequential segment controls and progress are rendered', () => {
   assert.match(html, /Чтобы начать следующий отрезок, завершите текущий с теми же параметрами\./);
   assert.match(timerUi, /textContent = '✓'/);
   assert.doesNotMatch(timerUi, /interrupted|✕/);
+  assert.match(html, /aria-expanded="true" aria-controls="parameterPanel"/);
+  assert.match(html, /\.parameters\.mobile-collapsed \.parameter-panel\{display:none\}/);
+  assert.match(timerUi, /setParametersExpanded\(false\)/);
+  assert.match(timerUi, /setParametersExpanded\(true\)/);
+  assert.match(timerLogic, /completedLayersBeforeSegment/);
+  assert.match(timerLogic, /targetCumulativeLayers/);
 });
 
 test('Timer persistence is standalone and does not depend on a network API', () => {
@@ -55,7 +62,7 @@ test('Timer persistence is standalone and does not depend on a network API', () 
 
 test('Service worker pre-caches timer assets within its existing safe scope logic', () => {
   assert.match(serviceWorker, /CACHE_PREFIX = 'easypracticecalc-'/);
-  assert.match(serviceWorker, /2026-08-20-v5/);
+  assert.match(serviceWorker, /2026-08-20-v6/);
   assert.match(serviceWorker, /'\.\/timer_logic\.js'/);
   assert.match(serviceWorker, /'\.\/timer\.js'/);
   assert.match(serviceWorker, /requestUrl\.origin !== self\.location\.origin/);

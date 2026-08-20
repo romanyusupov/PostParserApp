@@ -25,6 +25,8 @@ body{
   -webkit-font-smoothing:antialiased;
 }
 .card{max-width:900px;margin:auto;background:#3b2415;border-radius:20px;padding:30px}
+.parameter-toggle{display:none}
+.parameter-panel{display:block}
 .tabs{display:flex;gap:10px;margin-bottom:25px}
 .tab{
   padding:14px 25px;border-radius:12px;border:1px solid #d28a40;cursor:pointer;
@@ -65,6 +67,7 @@ select{
   background:#eca54e;color:#251307;font:inherit;font-weight:700;cursor:pointer
 }
 .timer-button.secondary{background:transparent;color:#f0b56d}
+.timer-button:disabled{opacity:.72;cursor:not-allowed}
 .timer-button[hidden]{display:none}
 .next-segment-button{width:100%;margin-top:13px;background:#5a341c;color:#f4d4ae}
 .next-segment-button:not(.secondary){background:#eca54e;color:#251307}
@@ -97,19 +100,34 @@ select:disabled{opacity:.72;cursor:not-allowed}
 .layer-step.complete{color:#f0b56d}.layer-step.complete .layer-marker{border-color:#eca54e;background:#eca54e;color:#251307}
 .layer-step.target .layer-marker{box-shadow:0 0 0 3px #f4d4ae}
 @media(max-width:600px){
-  body{padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
-  .card{padding:20px 16px;border-radius:18px}
+  body{padding-top:max(8px,env(safe-area-inset-top));padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env(safe-area-inset-right));padding-bottom:max(10px,env(safe-area-inset-bottom))}
+  .card{padding:12px;border-radius:18px}
+  .parameter-toggle{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:48px;
+    padding:10px 13px;border:1px solid #d28a40;border-radius:12px;background:#321d10;color:#fff;
+    font:inherit;text-align:left;cursor:pointer
+  }
+  .parameter-toggle-label{color:#f0b56d;font-weight:750}
+  .parameter-summary{min-width:0;overflow:hidden;color:#f4d4ae;font-size:14px;text-overflow:ellipsis;white-space:nowrap}
+  .parameters.mobile-collapsed .parameter-panel{display:none}
+  .parameter-panel{padding-top:12px}
   .tabs{gap:8px}
-  .tab{flex:1;text-align:center;padding:13px 8px;font-size:15px}
+  .tab{flex:1;text-align:center;padding:11px 8px;font-size:15px}
   .controls{gap:14px}
-  .result{font-size:21px}
-  .timer-card{padding:20px 10px}
+  .result{margin-top:14px;padding:14px;font-size:19px}
+  .timer-card{margin-top:10px;padding:12px 8px}
+  .timer-heading{font-size:16px}
+  .timer-status{margin-bottom:8px}
   .timer-circle{width:190px;height:190px}
   .timer-time{font-size:27px}
+  .timer-cumulative{margin-top:7px}
+  .timer-actions{margin-top:11px}
   .timer-button{min-width:100px;flex:1 1 120px}
-  .next-segment-button{flex-basis:100%}
-  .segment-item{font-size:13px}
-  .layer-progress{padding-right:24px}
+  .next-segment-button{flex-basis:100%;margin-top:9px}
+  .segment-history{margin-top:18px;padding-top:16px}
+  .segment-item{align-items:center;font-size:13px}
+  .segment-item>span:first-child{min-width:0;overflow-wrap:anywhere}
+  .layer-progress{margin-top:18px;padding-right:24px;padding-bottom:20px}
   .layer-label-full{display:none}
   .layer-label-short{display:inline}
 }
@@ -117,26 +135,35 @@ select:disabled{opacity:.72;cursor:not-allowed}
 </head>
 <body>
 <div class="card">
-  <div class="tabs">
-    <div class="tab active" data-practice="water" onclick="openTab('water',this)">Вода</div>
-    <div class="tab" data-practice="move" onclick="openTab('move',this)">Ходьба/бег</div>
-  </div>
+  <section class="parameters" id="practiceParameters">
+    <button class="parameter-toggle" id="parameterToggle" type="button"
+            aria-expanded="true" aria-controls="parameterPanel">
+      <span class="parameter-toggle-label">Параметры</span>
+      <span class="parameter-summary" id="parameterSummary"></span>
+    </button>
+    <div class="parameter-panel" id="parameterPanel">
+      <div class="tabs">
+        <div class="tab active" data-practice="water" onclick="openTab('water',this)">Вода</div>
+        <div class="tab" data-practice="move" onclick="openTab('move',this)">Ходьба/бег</div>
+      </div>
 
-  <div id="water" class="panel active">
-    <div class="controls">
-      <div><label>Количество слоев</label><select id="waterLayer"></select></div>
-      <div><label>Температура воды</label><select id="waterTemp"></select></div>
-    </div>
-    <div class="result" id="waterResult"></div>
-  </div>
+      <div id="water" class="panel active">
+        <div class="controls">
+          <div><label>Дополнительные слои</label><select id="waterLayer"></select></div>
+          <div><label>Температура воды</label><select id="waterTemp"></select></div>
+        </div>
+        <div class="result" id="waterResult"></div>
+      </div>
 
-  <div id="move" class="panel">
-    <div class="controls">
-      <div><label>Количество слоев</label><select id="moveLayer"></select></div>
-      <div><label>Скорость движения</label><select id="moveSpeed"></select></div>
+      <div id="move" class="panel">
+        <div class="controls">
+          <div><label>Дополнительные слои</label><select id="moveLayer"></select></div>
+          <div><label>Скорость движения</label><select id="moveSpeed"></select></div>
+        </div>
+        <div class="result" id="moveResult"></div>
+      </div>
     </div>
-    <div class="result" id="moveResult"></div>
-  </div>
+  </section>
 
   <section class="timer-card" id="timerCard" aria-labelledby="timerPractice">
     <h2 class="timer-heading" id="timerPractice">Вода</h2>

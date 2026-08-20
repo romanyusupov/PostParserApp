@@ -172,11 +172,15 @@
     storage.removeItem(STORAGE_KEY);
   }
 
+  function segmentLayersFrom(value) {
+    return Number(value && value.segmentLayers != null ? value.segmentLayers : value && value.targetLayers);
+  }
+
   function normalizeSegment(value) {
     if (!value || typeof value !== 'object' || !VALID_PRACTICES.has(value.practiceType)) return null;
     if (!['running', 'paused', 'completed'].includes(value.status)) return null;
     const plannedDurationMs = Number(value.plannedDurationMs);
-    const targetLayers = Number(value.targetLayers);
+    const targetLayers = segmentLayersFrom(value);
     const segmentNumber = Number(value.segmentNumber);
     if (!Number.isFinite(plannedDurationMs) || plannedDurationMs <= 0) return null;
     if (!Number.isInteger(targetLayers) || targetLayers < 1 || targetLayers > 5) return null;
@@ -186,6 +190,7 @@
       id: String(value.id || `segment-${segmentNumber}`),
       segmentNumber,
       practiceType: value.practiceType,
+      segmentLayers: targetLayers,
       targetLayers,
       parameters: value.parameters && typeof value.parameters === 'object'
         ? Object.assign({}, value.parameters)
@@ -208,12 +213,13 @@
   function normalizeDraft(value) {
     if (!value || !VALID_PRACTICES.has(value.practiceType)) return null;
     const segmentNumber = Number(value.segmentNumber);
-    const targetLayers = Number(value.targetLayers);
+    const targetLayers = segmentLayersFrom(value);
     if (!Number.isInteger(segmentNumber) || segmentNumber < 1) return null;
     if (!Number.isInteger(targetLayers) || targetLayers < 1 || targetLayers > 5) return null;
     return {
       segmentNumber,
       practiceType: value.practiceType,
+      segmentLayers: targetLayers,
       targetLayers,
       parameters: value.parameters && typeof value.parameters === 'object'
         ? Object.assign({}, value.parameters)
@@ -255,7 +261,7 @@
 
   function createSegment(options, now, segmentNumber) {
     const durationMs = Number(options.durationMs);
-    const targetLayers = Number(options.targetLayers);
+    const targetLayers = segmentLayersFrom(options);
     if (!VALID_PRACTICES.has(options.practiceType)) throw new Error('Неизвестный тип практики.');
     if (!Number.isFinite(durationMs) || durationMs <= 0) throw new Error('Некорректная длительность отрезка.');
     if (!Number.isInteger(targetLayers) || targetLayers < 1 || targetLayers > 5) {
@@ -265,6 +271,7 @@
       id: String(options.segmentId || `segment-${segmentNumber}-${Number(now)}`),
       segmentNumber,
       practiceType: options.practiceType,
+      segmentLayers: targetLayers,
       targetLayers,
       parameters: Object.assign({}, options.parameters || {}),
       plannedDurationMs: durationMs,
@@ -277,9 +284,10 @@
     };
   }
 
-  function getSegmentSnapshot(segment, now) {
+  function getSegmentSnapshot(segment, now, completedLayersBeforeSegment) {
     const normalized = normalizeSegment(segment);
     if (!normalized) return null;
+    const completedBefore = clamp(Number(completedLayersBeforeSegment) || 0, 0, 5);
     let remainingMs;
     if (normalized.status === 'running') {
       remainingMs = clamp(normalized.endAt - Number(now), 0, normalized.plannedDurationMs);
@@ -290,18 +298,25 @@
     }
     const elapsedMs = normalized.plannedDurationMs - remainingMs;
     const progress = clamp(elapsedMs / normalized.plannedDurationMs, 0, 1);
-    const completedLayers = clamp(normalized.targetLayers * progress, 0, normalized.targetLayers);
+    const segmentLayerProgress = clamp(normalized.segmentLayers * progress, 0, normalized.segmentLayers);
+    const totalLayerProgress = clamp(completedBefore + segmentLayerProgress, 0, 5);
+    const targetCumulativeLayers = clamp(completedBefore + normalized.segmentLayers, 0, 5);
     return {
       status: normalized.status === 'running' && remainingMs === 0 ? 'completed' : normalized.status,
       remainingMs,
       elapsedMs,
       progress,
-      completedLayers,
-      layerBarPercent: completedLayers / 5 * 100,
+      segmentLayers: normalized.segmentLayers,
+      segmentLayerProgress,
+      completedLayersBeforeSegment: completedBefore,
+      completedLayers: totalLayerProgress,
+      totalLayerProgress,
+      layerBarPercent: totalLayerProgress / 5 * 100,
       currentLayer: progress >= 1
-        ? normalized.targetLayers
-        : Math.min(normalized.targetLayers, Math.floor(completedLayers) + 1),
-      targetLayers: normalized.targetLayers
+        ? targetCumulativeLayers
+        : Math.min(5, Math.floor(totalLayerProgress) + 1),
+      targetLayers: normalized.segmentLayers,
+      targetCumulativeLayers
     };
   }
 
@@ -312,13 +327,25 @@
     );
   }
 
+  function completedLayerCount(session) {
+    return clamp(session.completedSegments.reduce(
+      (total, segment) => total + segment.segmentLayers,
+      0
+    ), 0, 5);
+  }
+
   function getWorkoutSnapshot(session, now) {
     const normalized = normalizeWorkoutSession(session);
     if (!normalized) return null;
+    const completedLayers = completedLayerCount(normalized);
     const segment = normalized.currentSegment
-      ? getSegmentSnapshot(normalized.currentSegment, now)
+      ? getSegmentSnapshot(normalized.currentSegment, now, completedLayers)
       : null;
     const completedElapsedMs = completedDuration(normalized);
+    const totalLayerProgress = segment ? segment.totalLayerProgress : completedLayers;
+    const targetCumulativeLayers = segment
+      ? segment.targetCumulativeLayers
+      : clamp(completedLayers + (normalized.draftSegment ? normalized.draftSegment.segmentLayers : 0), 0, 5);
     return {
       sessionStatus: segment && segment.status === 'completed'
         ? 'segment_completed'
@@ -326,6 +353,11 @@
       currentSegment: segment,
       completedElapsedMs,
       cumulativeElapsedMs: completedElapsedMs + (segment ? segment.elapsedMs : 0),
+      completedLayers,
+      totalLayerProgress,
+      layerBarPercent: totalLayerProgress / 5 * 100,
+      targetCumulativeLayers,
+      remainingLayers: Math.max(0, 5 - totalLayerProgress),
       nextSegmentNumber: normalized.currentSegment
         ? normalized.currentSegment.segmentNumber + (segment && segment.status === 'completed' ? 1 : 0)
         : normalized.draftSegment.segmentNumber
@@ -370,6 +402,9 @@
     const normalized = normalizeWorkoutSession(session);
     if (!normalized || normalized.sessionStatus !== 'configuring_next_segment') {
       return {started: false, reason: 'segment_already_active', session: normalized};
+    }
+    if (completedLayerCount(normalized) + segmentLayersFrom(options) > 5) {
+      return {started: false, reason: 'layer_limit_exceeded', session: normalized};
     }
     const segmentNumber = normalized.draftSegment.segmentNumber;
     return {
@@ -421,6 +456,10 @@
       return {allowed: false, reason: 'next_segment_not_allowed', session: normalized};
     }
     const completed = normalized.currentSegment;
+    const totalLayersAfterCurrent = completedLayerCount(normalized) + completed.segmentLayers;
+    if (totalLayersAfterCurrent >= 5) {
+      return {allowed: false, reason: 'all_layers_completed', session: normalized};
+    }
     const alreadyStored = normalized.completedSegments.some(segment => segment.id === completed.id);
     const completedSegments = alreadyStored
       ? normalized.completedSegments.slice()
@@ -434,8 +473,11 @@
         draftSegment: {
           segmentNumber: completed.segmentNumber + 1,
           practiceType: completed.practiceType,
-          targetLayers: completed.targetLayers,
-          parameters: Object.assign({}, completed.parameters)
+          segmentLayers: Math.min(completed.segmentLayers, 5 - totalLayersAfterCurrent),
+          targetLayers: Math.min(completed.segmentLayers, 5 - totalLayersAfterCurrent),
+          parameters: Object.assign({}, completed.parameters, {
+            layer: String(Math.min(completed.segmentLayers, 5 - totalLayersAfterCurrent))
+          })
         },
         updatedAt: Number(now)
       })
@@ -449,6 +491,7 @@
       segmentNumber: normalized.draftSegment.segmentNumber
     }));
     if (!nextDraft) return normalized;
+    if (completedLayerCount(normalized) + nextDraft.segmentLayers > 5) return normalized;
     return Object.assign({}, normalized, {draftSegment: nextDraft, updatedAt: Number(now)});
   }
 
@@ -542,6 +585,7 @@
     normalizeWorkoutSession,
     getSegmentSnapshot,
     getWorkoutSnapshot,
+    completedLayerCount,
     syncWorkoutSession,
     startWorkoutSegment,
     pauseWorkout,

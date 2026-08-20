@@ -123,8 +123,8 @@ test('Paused time is excluded from cumulative time', () => {
   assert.equal(Timer.getWorkoutSnapshot(paused, 2_401_000).cumulativeElapsedMs, 600_000);
 });
 
-test('New segment resets layer progress and applies its own target', () => {
-  let first = start(1_000, {targetLayers: 3, parameters: {layer: '3', speed: '9.0'}});
+test('New segment continues cumulative layer progress and applies a cumulative target', () => {
+  let first = start(1_000, {targetLayers: 1, parameters: {layer: '1', speed: '9.0'}});
   first = next(finish(first, 1_000 + DURATION), 1_000 + DURATION).session;
   const second = Timer.startWorkoutSegment(first, options({
     segmentId: 'segment-2',
@@ -132,8 +132,140 @@ test('New segment resets layer progress and applies its own target', () => {
     parameters: {layer: '1', speed: '6.0'}
   }), 2_000_000).session;
   const snapshot = Timer.getWorkoutSnapshot(second, 2_000_000).currentSegment;
-  assert.equal(snapshot.completedLayers, 0);
-  assert.equal(snapshot.targetLayers, 1);
+  assert.equal(snapshot.completedLayersBeforeSegment, 1);
+  assert.equal(snapshot.totalLayerProgress, 1);
+  assert.equal(snapshot.currentLayer, 2);
+  assert.equal(snapshot.targetCumulativeLayers, 2);
+});
+
+test('One completed layer plus one new layer progresses from 1 through 1.5 to 2', () => {
+  let session = next(finish(start(1_000), 1_000 + DURATION), 1_000 + DURATION).session;
+  session = Timer.startWorkoutSegment(session, options({segmentId: 'segment-2'}), 2_000_000).session;
+  assert.equal(Timer.getWorkoutSnapshot(session, 2_000_000).totalLayerProgress, 1);
+  assert.equal(Timer.getWorkoutSnapshot(session, 2_000_000 + DURATION / 2).totalLayerProgress, 1.5);
+  assert.equal(Timer.getWorkoutSnapshot(session, 2_000_000 + DURATION).totalLayerProgress, 2);
+});
+
+test('One completed layer plus two new layers progresses from 1 through 2 to target 3', () => {
+  let session = next(finish(start(1_000), 1_000 + DURATION), 1_000 + DURATION).session;
+  const secondDuration = DURATION * 2;
+  session = Timer.startWorkoutSegment(session, options({
+    segmentId: 'segment-2', targetLayers: 2, durationMs: secondDuration,
+    parameters: {layer: '2', speed: '9.0'}
+  }), 2_000_000).session;
+  const atStart = Timer.getWorkoutSnapshot(session, 2_000_000).currentSegment;
+  const atMiddle = Timer.getWorkoutSnapshot(session, 2_000_000 + secondDuration / 2).currentSegment;
+  const atFinish = Timer.getWorkoutSnapshot(session, 2_000_000 + secondDuration).currentSegment;
+  assert.equal(atStart.totalLayerProgress, 1);
+  assert.equal(atMiddle.totalLayerProgress, 2);
+  assert.equal(atFinish.totalLayerProgress, 3);
+  assert.equal(atStart.targetCumulativeLayers, 3);
+});
+
+test('Two plus one plus two layers form one continuous zero-to-five sequence', () => {
+  let now = 1_000;
+  let session = start(now, {targetLayers: 2, durationMs: DURATION * 2, parameters: {layer: '2', speed: '9.0'}});
+  now += DURATION * 2;
+  assert.equal(Timer.getWorkoutSnapshot(session, now).totalLayerProgress, 2);
+  session = next(finish(session, now), now).session;
+  session = Timer.startWorkoutSegment(session, options({segmentId: 'segment-2'}), now + 1).session;
+  now += 1 + DURATION;
+  assert.equal(Timer.getWorkoutSnapshot(session, now).totalLayerProgress, 3);
+  session = next(finish(session, now), now).session;
+  session = Timer.startWorkoutSegment(session, options({
+    segmentId: 'segment-3', targetLayers: 2, durationMs: DURATION * 2,
+    parameters: {layer: '2', speed: '6.0'}
+  }), now + 1).session;
+  now += 1 + DURATION * 2;
+  assert.equal(Timer.getWorkoutSnapshot(session, now).totalLayerProgress, 5);
+});
+
+test('Speed change affects only the new segment duration while layers continue from 1 to 2', () => {
+  const slowerDuration = (38 * 60 + 42) * 1000;
+  let session = next(finish(start(1_000), 1_000 + DURATION), 1_000 + DURATION).session;
+  session = Timer.startWorkoutSegment(session, options({
+    segmentId: 'segment-2', durationMs: slowerDuration,
+    parameters: {layer: '1', speed: '6.0'}
+  }), 2_000_000).session;
+  const middle = Timer.getWorkoutSnapshot(session, 2_000_000 + slowerDuration / 2);
+  assert.equal(session.completedSegments[0].plannedDurationMs, DURATION);
+  assert.equal(session.currentSegment.plannedDurationMs, slowerDuration);
+  assert.equal(middle.totalLayerProgress, 1.5);
+  assert.equal(middle.cumulativeElapsedMs, DURATION + slowerDuration / 2);
+});
+
+test('Water temperature change affects only the new segment and continues cumulative layers', () => {
+  const warmDuration = (14 * 60 + 36) * 1000;
+  const coldDuration = (6 * 60 + 12) * 1000;
+  let session = start(1_000, {
+    practiceType: 'water', durationMs: warmDuration, targetLayers: 1,
+    parameters: {layer: '1', temperature: '28'}
+  });
+  session = next(finish(session, 1_000 + warmDuration), 1_000 + warmDuration).session;
+  session = Timer.startWorkoutSegment(session, options({
+    segmentId: 'water-2', practiceType: 'water', durationMs: coldDuration,
+    parameters: {layer: '1', temperature: '20'}
+  }), 2_000_000).session;
+  assert.equal(Timer.getWorkoutSnapshot(session, 2_000_000).totalLayerProgress, 1);
+  assert.equal(Timer.getWorkoutSnapshot(session, 2_000_000 + coldDuration).totalLayerProgress, 2);
+  assert.equal(session.currentSegment.plannedDurationMs, coldDuration);
+});
+
+test('Pause freezes cumulative progress of a later segment and Resume continues it', () => {
+  let session = next(finish(start(1_000), 1_000 + DURATION), 1_000 + DURATION).session;
+  session = Timer.startWorkoutSegment(session, options({segmentId: 'segment-2'}), 2_000_000).session;
+  session = Timer.pauseWorkout(session, 2_000_000 + DURATION * 0.37);
+  assert.equal(Timer.getWorkoutSnapshot(session, 9_000_000).totalLayerProgress, 1.37);
+  session = Timer.resumeWorkout(session, 10_000_000);
+  assert.equal(Timer.getWorkoutSnapshot(session, 10_000_000 + DURATION * 0.13).totalLayerProgress, 1.5);
+});
+
+test('Reload restores a running second segment at cumulative depth 1.4', () => {
+  const store = storage();
+  let session = next(finish(start(1_000), 1_000 + DURATION), 1_000 + DURATION).session;
+  session = Timer.startWorkoutSegment(session, options({segmentId: 'segment-2'}), 2_000_000).session;
+  Timer.saveWorkoutSession(store, session);
+  const loaded = Timer.loadWorkoutSession(store, 2_000_000 + DURATION * 0.4);
+  assert.equal(Timer.getWorkoutSnapshot(loaded, 2_000_000 + DURATION * 0.4).totalLayerProgress, 1.4);
+});
+
+test('A second segment completed while PWA is closed restores at cumulative layer 2', () => {
+  const store = storage();
+  let session = next(finish(start(1_000), 1_000 + DURATION), 1_000 + DURATION).session;
+  session = Timer.startWorkoutSegment(session, options({segmentId: 'segment-2'}), 2_000_000).session;
+  Timer.saveWorkoutSession(store, session);
+  const reopened = Timer.loadWorkoutSession(store, 2_000_000 + DURATION + 3_600_000);
+  const snapshot = Timer.getWorkoutSnapshot(reopened, 2_000_000 + DURATION + 3_600_000);
+  assert.equal(reopened.sessionStatus, 'segment_completed');
+  assert.equal(snapshot.totalLayerProgress, 2);
+  assert.equal(snapshot.cumulativeElapsedMs, DURATION * 2);
+});
+
+test('Existing v2 sessions without segmentLayers migrate cumulatively without timer loss', () => {
+  const store = storage();
+  const now = 5_000_000;
+  const existing = {
+    version: 2, sessionStatus: 'running', createdAt: 1_000, updatedAt: now,
+    completedSegments: [{
+      id: 'old-1', segmentNumber: 1, practiceType: 'move', targetLayers: 1,
+      parameters: {layer: '1', speed: '9.0'}, plannedDurationMs: DURATION,
+      actualElapsedMs: DURATION, status: 'completed', startedAt: 1_000,
+      endAt: null, remainingMsAtPause: 0, completedAt: 1_000 + DURATION
+    }],
+    currentSegment: {
+      id: 'old-2', segmentNumber: 2, practiceType: 'move', targetLayers: 1,
+      parameters: {layer: '1', speed: '6.0'}, plannedDurationMs: DURATION,
+      actualElapsedMs: null, status: 'running', startedAt: now - DURATION * 0.4,
+      endAt: now + DURATION * 0.6, remainingMsAtPause: null, completedAt: null
+    },
+    draftSegment: null
+  };
+  store.setItem(Timer.SESSION_STORAGE_KEY, JSON.stringify(existing));
+  const migrated = Timer.loadWorkoutSession(store, now);
+  const snapshot = Timer.getWorkoutSnapshot(migrated, now);
+  assert.equal(snapshot.totalLayerProgress, 1.4);
+  assert.equal(migrated.currentSegment.endAt, existing.currentSegment.endAt);
+  assert.equal(migrated.completedSegments[0].segmentLayers, 1);
 });
 
 test('Double Next cannot duplicate a completed segment', () => {
@@ -207,21 +339,45 @@ test('Reset clears the entire incomplete workout session', () => {
   assert.equal(Timer.loadWorkoutSession(store, 601_000), null);
 });
 
-test('Ten sequential segments keep unique numbering and exact cumulative duration', () => {
+test('Five-layer limit rejects additional layers and preserves the completed workout', () => {
   let now = 1_000;
   let session = start(now);
-  for (let number = 1; number <= 10; number += 1) {
+  for (let number = 1; number <= 5; number += 1) {
     now += DURATION;
     session = finish(session, now);
-    if (number < 10) {
+    if (number < 5) {
       session = next(session, now).session;
       session = Timer.startWorkoutSegment(session, options({segmentId: `segment-${number + 1}`}), now + 1).session;
       now += 1;
     }
   }
-  const finalHistory = next(session, now).session;
-  assert.deepEqual(finalHistory.completedSegments.map(segment => segment.segmentNumber), [1,2,3,4,5,6,7,8,9,10]);
-  assert.equal(Timer.getWorkoutSnapshot(finalHistory, now + 1_000_000).cumulativeElapsedMs, DURATION * 10);
+  const finalSnapshot = Timer.getWorkoutSnapshot(session, now);
+  const blocked = next(session, now);
+  assert.equal(finalSnapshot.totalLayerProgress, 5);
+  assert.equal(finalSnapshot.remainingLayers, 0);
+  assert.equal(blocked.allowed, false);
+  assert.equal(blocked.reason, 'all_layers_completed');
+  assert.deepEqual(session.completedSegments.map(segment => segment.segmentNumber), [1,2,3,4]);
+  assert.equal(finalSnapshot.cumulativeElapsedMs, DURATION * 5);
+});
+
+test('After four completed layers only one additional layer can be started', () => {
+  let session = start(1_000, {
+    targetLayers: 4, durationMs: DURATION * 4,
+    parameters: {layer: '4', speed: '9.0'}
+  });
+  const finishedAt = 1_000 + DURATION * 4;
+  session = next(finish(session, finishedAt), finishedAt).session;
+  assert.equal(Timer.getWorkoutSnapshot(session, finishedAt).remainingLayers, 1);
+  const tooMany = Timer.startWorkoutSegment(session, options({
+    segmentId: 'invalid-2', targetLayers: 2, durationMs: DURATION * 2,
+    parameters: {layer: '2', speed: '6.0'}
+  }), finishedAt + 1);
+  assert.equal(tooMany.started, false);
+  assert.equal(tooMany.reason, 'layer_limit_exceeded');
+  const valid = Timer.startWorkoutSegment(session, options({segmentId: 'valid-2'}), finishedAt + 1);
+  assert.equal(valid.started, true);
+  assert.equal(Timer.getWorkoutSnapshot(valid.session, finishedAt + 1).currentSegment.targetCumulativeLayers, 5);
 });
 
 test('Water segment keeps its temperature in completed history', () => {

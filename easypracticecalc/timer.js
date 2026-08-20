@@ -6,7 +6,12 @@
   const radius = 94;
   const circumference = 2 * Math.PI * radius;
   const warningMessage = 'Чтобы начать следующий отрезок, завершите текущий с теми же параметрами.';
+  const allLayersMessage = 'Все 5 слоёв пройдены.';
+  const mobileQuery = window.matchMedia('(max-width: 600px)');
   const elements = {
+    parameters: document.getElementById('practiceParameters'),
+    parameterToggle: document.getElementById('parameterToggle'),
+    parameterSummary: document.getElementById('parameterSummary'),
     practice: document.getElementById('timerPractice'),
     status: document.getElementById('timerStatus'),
     time: document.getElementById('timerTime'),
@@ -28,6 +33,7 @@
   let workoutSession = Timer.loadWorkoutSession(storage, Date.now());
   let renderInterval = null;
   let warningReturnFocus = null;
+  let parametersExpanded = !workoutSession || workoutSession.sessionStatus === 'configuring_next_segment';
 
   elements.progress.style.strokeDasharray = String(circumference);
 
@@ -46,6 +52,7 @@
       return {
         practiceType,
         durationMs: Math.round(minutes * 60) * 1000,
+        segmentLayers: Number(moveLayer.value),
         targetLayers: Number(moveLayer.value),
         parameters: {layer: moveLayer.value, speed: moveSpeed.value}
       };
@@ -54,6 +61,7 @@
     return {
       practiceType: 'water',
       durationMs: Math.round(minutes * 60) * 1000,
+      segmentLayers: Number(waterLayer.value),
       targetLayers: Number(waterLayer.value),
       parameters: {layer: waterLayer.value, temperature: waterTemp.value}
     };
@@ -63,6 +71,7 @@
     const options = practiceOptions(activePractice());
     return {
       practiceType: options.practiceType,
+      segmentLayers: options.segmentLayers,
       targetLayers: options.targetLayers,
       parameters: options.parameters
     };
@@ -70,6 +79,30 @@
 
   function canConfigure() {
     return !workoutSession || workoutSession.sessionStatus === 'configuring_next_segment';
+  }
+
+  function setParametersExpanded(expanded) {
+    parametersExpanded = Boolean(expanded);
+    const visuallyExpanded = !mobileQuery.matches || parametersExpanded;
+    elements.parameters.classList.toggle('mobile-collapsed', !visuallyExpanded);
+    elements.parameterToggle.setAttribute('aria-expanded', String(visuallyExpanded));
+  }
+
+  function limitLayerSelectors(maximum) {
+    const safeMaximum = Math.max(1, Math.min(5, Number(maximum) || 1));
+    [waterLayer, moveLayer].forEach(select => {
+      Array.from(select.options).forEach(option => {
+        const unavailable = Number(option.value) > safeMaximum;
+        option.hidden = unavailable;
+        option.disabled = unavailable;
+      });
+      if (Number(select.value) > safeMaximum) select.value = String(safeMaximum);
+    });
+  }
+
+  function remainingLayerCapacity() {
+    if (!workoutSession) return 5;
+    return Timer.getWorkoutSnapshot(workoutSession, Date.now()).remainingLayers;
   }
 
   function setConfigurationEnabled(enabled) {
@@ -83,13 +116,14 @@
   function restoreControls(descriptor) {
     if (!descriptor) return;
     const parameters = descriptor.parameters || {};
+    const layerValue = String(parameters.layer || descriptor.segmentLayers || descriptor.targetLayers || 1);
     if (descriptor.practiceType === 'move') {
-      if (parameters.layer && moveLayer.querySelector(`option[value="${parameters.layer}"]`)) moveLayer.value = parameters.layer;
+      if (moveLayer.querySelector(`option[value="${layerValue}"]`)) moveLayer.value = layerValue;
       if (parameters.speed && moveSpeed.querySelector(`option[value="${parameters.speed}"]`)) moveSpeed.value = parameters.speed;
       openTab('move', document.querySelector('.tab[data-practice="move"]'));
       updateMove();
     } else {
-      if (parameters.layer && waterLayer.querySelector(`option[value="${parameters.layer}"]`)) waterLayer.value = parameters.layer;
+      if (waterLayer.querySelector(`option[value="${layerValue}"]`)) waterLayer.value = layerValue;
       if (parameters.temperature && waterTemp.querySelector(`option[value="${parameters.temperature}"]`)) waterTemp.value = parameters.temperature;
       openTab('water', document.querySelector('.tab[data-practice="water"]'));
       updateWater();
@@ -100,9 +134,9 @@
     if (workoutSession) Timer.saveWorkoutSession(storage, workoutSession);
   }
 
-  function showLockedWarning() {
+  function showLockedWarning(message) {
     warningReturnFocus = document.activeElement;
-    elements.warningText.textContent = warningMessage;
+    elements.warningText.textContent = message || warningMessage;
     elements.warning.hidden = false;
     elements.warningClose.focus();
   }
@@ -113,12 +147,13 @@
     warningReturnFocus = null;
   }
 
-  function renderLayers(snapshot, selectedLayers) {
+  function renderLayers(snapshot, targetCumulativeLayers) {
     elements.layers.replaceChildren();
     const completedLayers = snapshot ? snapshot.completedLayers : 0;
     const layerBarPercent = snapshot ? snapshot.layerBarPercent : 0;
+    const targetLayers = Math.max(0, Math.min(5, Number(targetCumulativeLayers) || 0));
     elements.layers.setAttribute('aria-valuenow', completedLayers.toFixed(2));
-    elements.layers.setAttribute('aria-valuetext', `Пройдено ${completedLayers.toFixed(2)} из 5 слоёв. Цель: ${selectedLayers}.`);
+    elements.layers.setAttribute('aria-valuetext', `Пройдено ${completedLayers.toFixed(2)} из 5 слоёв. Цель: ${targetLayers}.`);
 
     const scale = document.createElement('div');
     scale.className = 'layer-scale';
@@ -136,7 +171,7 @@
       item.className = 'layer-step';
       if (completedLayers >= layer) item.classList.add('complete');
       if (snapshot && snapshot.status !== 'completed' && layer === snapshot.currentLayer) item.classList.add('current');
-      if (layer === selectedLayers) item.classList.add('target');
+      if (layer === targetLayers) item.classList.add('target');
       const marker = document.createElement('span');
       marker.className = 'layer-marker';
       marker.textContent = String(layer);
@@ -178,6 +213,24 @@
     return seconds ? `${minutes} мин ${seconds} сек/км` : `${minutes} мин/км`;
   }
 
+  function compactPaceText(speed) {
+    const paceSeconds = Math.round(3600 / Number(speed));
+    return `${Math.floor(paceSeconds / 60)}:${String(paceSeconds % 60).padStart(2, '0')}/км`;
+  }
+
+  function updateParameterSummary(descriptor) {
+    const source = descriptor || practiceOptions(activePractice());
+    const parameters = source.parameters || {};
+    const layers = Number(source.segmentLayers || source.targetLayers || parameters.layer || 1);
+    if (source.practiceType === 'move') {
+      const speed = parameters.speed || moveSpeed.value;
+      elements.parameterSummary.textContent = `${layerText(layers)} · ${Number(speed)} км/ч · ${compactPaceText(speed)}`;
+    } else {
+      const temperature = parameters.temperature || waterTemp.value;
+      elements.parameterSummary.textContent = `${layerText(layers)} · ${temperature} °C`;
+    }
+  }
+
   function segmentDescription(segment) {
     const parts = [
       `${segment.segmentNumber} отрезок`,
@@ -194,7 +247,12 @@
   }
 
   function renderHistory() {
-    const segments = workoutSession ? workoutSession.completedSegments : [];
+    const segments = workoutSession ? workoutSession.completedSegments.slice() : [];
+    if (workoutSession && workoutSession.currentSegment && workoutSession.currentSegment.status === 'completed') {
+      const snapshot = Timer.getWorkoutSnapshot(workoutSession, Date.now());
+      const current = workoutSession.currentSegment;
+      if (snapshot.totalLayerProgress >= 5 && !segments.some(segment => segment.id === current.id)) segments.push(current);
+    }
     elements.segmentList.replaceChildren();
     elements.history.hidden = segments.length === 0;
     segments.forEach(segment => {
@@ -225,22 +283,35 @@
 
   function preview() {
     if (workoutSession && workoutSession.sessionStatus !== 'configuring_next_segment') return;
+    const sessionSnapshot = workoutSession ? Timer.getWorkoutSnapshot(workoutSession, Date.now()) : null;
+    const completedLayers = sessionSnapshot ? sessionSnapshot.completedLayers : 0;
+    const remainingLayers = sessionSnapshot ? sessionSnapshot.remainingLayers : 5;
+    limitLayerSelectors(remainingLayers || 1);
     const options = practiceOptions(activePractice());
     const segmentNumber = workoutSession ? workoutSession.draftSegment.segmentNumber : 1;
-    const cumulative = workoutSession ? Timer.getWorkoutSnapshot(workoutSession, Date.now()).cumulativeElapsedMs : 0;
+    const cumulative = sessionSnapshot ? sessionSnapshot.cumulativeElapsedMs : 0;
+    const targetCumulativeLayers = Math.min(5, completedLayers + options.segmentLayers);
     elements.practice.textContent = `Отрезок ${segmentNumber} · ${options.practiceType === 'water' ? 'Вода' : 'Ходьба/бег'}`;
-    elements.status.textContent = 'Готово к запуску';
+    elements.status.textContent = remainingLayers > 0 ? 'Готово к запуску' : allLayersMessage;
     elements.time.textContent = Timer.formatRemaining(options.durationMs);
     elements.cumulative.textContent = Timer.formatElapsed(cumulative);
     elements.progress.style.strokeDashoffset = String(circumference);
-    renderLayers(null, options.targetLayers);
-    elements.start.hidden = false;
+    renderLayers({
+      status: 'configuring',
+      completedLayers,
+      layerBarPercent: completedLayers / 5 * 100,
+      currentLayer: completedLayers >= 5 ? 5 : Math.floor(completedLayers) + 1
+    }, targetCumulativeLayers);
+    elements.start.hidden = remainingLayers <= 0;
     elements.start.textContent = `Начать отрезок ${segmentNumber}`;
     elements.pause.hidden = true;
     elements.resume.hidden = true;
     elements.reset.hidden = !workoutSession;
     elements.next.hidden = true;
+    elements.next.disabled = false;
+    elements.next.textContent = '+ Следующий отрезок';
     setConfigurationEnabled(true);
+    updateParameterSummary(options);
     renderHistory();
   }
 
@@ -260,22 +331,28 @@
     const current = snapshot.currentSegment;
     elements.practice.textContent = `Отрезок ${segment.segmentNumber} · ${segment.practiceType === 'water' ? 'Вода' : 'Ходьба/бег'}`;
     elements.status.textContent = snapshot.sessionStatus === 'running'
-      ? `Идёт ${current.currentLayer} слой из ${current.targetLayers}`
+      ? `Идёт ${current.currentLayer}-й слой · цель ${current.targetCumulativeLayers} из 5`
       : snapshot.sessionStatus === 'paused'
-        ? `Пауза · ${current.currentLayer} слой из ${current.targetLayers}`
+        ? `Пауза · ${current.currentLayer}-й слой · цель ${current.targetCumulativeLayers} из 5`
         : 'Отрезок завершён';
     elements.time.textContent = Timer.formatRemaining(current.remainingMs);
     elements.cumulative.textContent = Timer.formatElapsed(snapshot.cumulativeElapsedMs);
     elements.progress.style.strokeDashoffset = String(circumference * (1 - current.progress));
-    renderLayers(current, current.targetLayers);
+    renderLayers(current, current.targetCumulativeLayers);
     elements.start.hidden = true;
     elements.pause.hidden = snapshot.sessionStatus !== 'running';
     elements.resume.hidden = snapshot.sessionStatus !== 'paused';
     elements.reset.hidden = false;
+    const allLayersCompleted = snapshot.sessionStatus === 'segment_completed' && snapshot.totalLayerProgress >= 5;
     elements.next.hidden = false;
-    elements.next.classList.toggle('secondary', snapshot.sessionStatus !== 'segment_completed');
-    elements.next.title = snapshot.sessionStatus === 'segment_completed' ? 'Настроить следующий отрезок' : warningMessage;
+    elements.next.disabled = allLayersCompleted;
+    elements.next.textContent = allLayersCompleted ? allLayersMessage : '+ Следующий отрезок';
+    elements.next.classList.toggle('secondary', snapshot.sessionStatus !== 'segment_completed' || allLayersCompleted);
+    elements.next.title = allLayersCompleted
+      ? allLayersMessage
+      : snapshot.sessionStatus === 'segment_completed' ? 'Настроить следующий отрезок' : warningMessage;
     setConfigurationEnabled(false);
+    updateParameterSummary(segment);
     renderHistory();
   }
 
@@ -283,10 +360,11 @@
     const options = Object.assign(practiceOptions(activePractice()), {segmentId: createSegmentId()});
     const result = Timer.startWorkoutSegment(workoutSession, options, Date.now());
     if (!result.started) {
-      showLockedWarning();
+      showLockedWarning(result.reason === 'layer_limit_exceeded' ? allLayersMessage : warningMessage);
       return;
     }
     workoutSession = result.session;
+    setParametersExpanded(false);
     persistSession();
     refresh(Date.now());
     ensureVisualUpdates();
@@ -309,12 +387,13 @@
   function nextSegment() {
     const result = Timer.requestNextSegment(workoutSession, Date.now());
     if (!result.allowed) {
-      showLockedWarning();
+      showLockedWarning(result.reason === 'all_layers_completed' ? allLayersMessage : warningMessage);
       return;
     }
     workoutSession = result.session;
     persistSession();
     stopVisualUpdates();
+    setParametersExpanded(true);
     restoreControls(workoutSession.draftSegment);
     preview();
   }
@@ -332,6 +411,8 @@
     stopVisualUpdates();
     workoutSession = null;
     Timer.clearWorkoutSession(storage);
+    limitLayerSelectors(5);
+    setParametersExpanded(true);
     setConfigurationEnabled(true);
     preview();
   }
@@ -341,6 +422,7 @@
   elements.resume.addEventListener('click', resume);
   elements.reset.addEventListener('click', reset);
   elements.next.addEventListener('click', nextSegment);
+  elements.parameterToggle.addEventListener('click', () => setParametersExpanded(!parametersExpanded));
   elements.warningClose.addEventListener('click', hideWarning);
   elements.warning.addEventListener('click', event => {
     if (event.target === elements.warning) hideWarning();
@@ -355,9 +437,16 @@
   });
   window.addEventListener('pageshow', () => refresh(Date.now()));
   window.addEventListener('focus', () => refresh(Date.now()));
+  const handleViewportChange = () => setParametersExpanded(parametersExpanded);
+  if (typeof mobileQuery.addEventListener === 'function') mobileQuery.addEventListener('change', handleViewportChange);
+  else if (typeof mobileQuery.addListener === 'function') mobileQuery.addListener(handleViewportChange);
 
   const descriptor = workoutSession ? workoutSession.currentSegment || workoutSession.draftSegment : null;
+  limitLayerSelectors(workoutSession && workoutSession.sessionStatus === 'configuring_next_segment'
+    ? remainingLayerCapacity()
+    : 5);
   restoreControls(descriptor);
+  setParametersExpanded(parametersExpanded);
   if (workoutSession) persistSession();
   window.easyTimerController = {refresh, preview, canConfigure, showLockedWarning};
   refresh(Date.now());
