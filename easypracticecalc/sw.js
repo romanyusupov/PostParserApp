@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'easypracticecalc-';
-const CACHE_NAME = `${CACHE_PREFIX}2026-08-20-v3`;
+const CACHE_NAME = `${CACHE_PREFIX}2026-08-20-v4`;
 const ASSETS = [
   './',
   './index.html',

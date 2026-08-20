@@ -96,6 +96,47 @@ test('Layer progress adapts to fewer selected layers', () => {
   assert.equal(Timer.getTimerSnapshot(state, 51_000).currentLayer, 2);
 });
 
+test('Five-layer bar maps elapsed time to the full zero-to-five scale', () => {
+  const state = create();
+  const cases = [
+    [1_000, 0, 0],
+    [21_000, 1, 20],
+    [41_000, 2, 40],
+    [61_000, 3, 60],
+    [81_000, 4, 80],
+    [101_000, 5, 100]
+  ];
+  for (const [now, layers, percent] of cases) {
+    const snapshot = Timer.getTimerSnapshot(state, now);
+    assert.equal(snapshot.completedLayers, layers);
+    assert.equal(snapshot.layerBarPercent, percent);
+  }
+});
+
+test('Three-layer practice stops at the third marker of the five-layer scale', () => {
+  const state = create(1_000, 'water', 3);
+  assert.equal(Timer.getTimerSnapshot(state, 1_000).completedLayers, 0);
+  assert.ok(Math.abs(Timer.getTimerSnapshot(state, 1_000 + 100_000 / 3).completedLayers - 1) < 1e-9);
+  assert.ok(Math.abs(Timer.getTimerSnapshot(state, 1_000 + 200_000 / 3).completedLayers - 2) < 1e-9);
+  const finished = Timer.getTimerSnapshot(state, 101_000);
+  assert.equal(finished.completedLayers, 3);
+  assert.equal(finished.layerBarPercent, 60);
+});
+
+test('One-layer practice finishes at the first marker without overflow', () => {
+  const finished = Timer.getTimerSnapshot(create(1_000, 'move', 1), 101_000);
+  assert.equal(finished.completedLayers, 1);
+  assert.equal(finished.layerBarPercent, 20);
+});
+
+test('Paused and resumed layer depth follows the persisted timestamp state', () => {
+  const paused = Timer.pauseTimer(create(), 36_000);
+  const frozen = Timer.getTimerSnapshot(paused, 9_000_000);
+  assert.equal(frozen.completedLayers, 1.75);
+  const resumed = Timer.resumeTimer(paused, 10_000_000);
+  assert.equal(Timer.getTimerSnapshot(resumed, 10_010_000).completedLayers, 2.25);
+});
+
 test('Water and movement practices remain distinguishable after persistence', () => {
   const storage = memoryStorage();
   const move = create(1_000, 'move', 3);

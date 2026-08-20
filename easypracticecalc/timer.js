@@ -64,19 +64,48 @@
 
   function renderLayers(snapshot, selectedLayers) {
     elements.layers.replaceChildren();
-    for (let layer = 1; layer <= selectedLayers; layer += 1) {
+    const completedLayers = snapshot ? snapshot.completedLayers : 0;
+    const layerBarPercent = snapshot ? snapshot.layerBarPercent : 0;
+    elements.layers.setAttribute('aria-valuenow', completedLayers.toFixed(2));
+    elements.layers.setAttribute(
+      'aria-valuetext',
+      `Пройдено ${completedLayers.toFixed(2)} из 5 слоёв. Цель: ${selectedLayers}.`
+    );
+
+    const scale = document.createElement('div');
+    scale.className = 'layer-scale';
+    const track = document.createElement('div');
+    track.className = 'layer-track';
+    const fill = document.createElement('div');
+    fill.className = 'layer-fill';
+    fill.style.width = `${layerBarPercent}%`;
+    track.appendChild(fill);
+    const markers = document.createElement('div');
+    markers.className = 'layer-markers';
+
+    for (let layer = 1; layer <= 5; layer += 1) {
       const item = document.createElement('div');
       item.className = 'layer-step';
-      if (snapshot && layer < snapshot.currentLayer) item.classList.add('complete');
-      if (snapshot && layer === snapshot.currentLayer) item.classList.add(snapshot.status === 'finished' ? 'complete' : 'current');
+      if (completedLayers >= layer) item.classList.add('complete');
+      if (snapshot && snapshot.status !== 'finished' && layer === snapshot.currentLayer) item.classList.add('current');
+      if (layer === selectedLayers) item.classList.add('target');
       const marker = document.createElement('span');
       marker.className = 'layer-marker';
       marker.textContent = String(layer);
       const label = document.createElement('span');
-      label.textContent = `${layer} слой`;
+      label.className = 'layer-label';
+      const fullLabel = document.createElement('span');
+      fullLabel.className = 'layer-label-full';
+      fullLabel.textContent = layer === 1 ? '1 слой' : layer < 5 ? `${layer} слоя` : '5 слоёв';
+      const shortLabel = document.createElement('span');
+      shortLabel.className = 'layer-label-short';
+      shortLabel.textContent = String(layer);
+      label.append(fullLabel, shortLabel);
       item.append(marker, label);
-      elements.layers.appendChild(item);
+      markers.appendChild(item);
     }
+    scale.append(track, markers);
+    elements.layers.appendChild(scale);
   }
 
   function stopVisualUpdates() {

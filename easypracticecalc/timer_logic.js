@@ -88,15 +88,19 @@
 
     const elapsedMs = normalized.durationMs - remainingMs;
     const progress = clamp(elapsedMs / normalized.durationMs, 0, 1);
+    const completedLayers = clamp(normalized.targetLayers * progress, 0, normalized.targetLayers);
+    const layerBarPercent = completedLayers / 5 * 100;
     const currentLayer = progress >= 1
       ? normalized.targetLayers
-      : Math.min(normalized.targetLayers, Math.floor(progress * normalized.targetLayers) + 1);
+      : Math.min(normalized.targetLayers, Math.floor(completedLayers) + 1);
 
     return {
       status: normalized.status === 'running' && remainingMs === 0 ? 'finished' : normalized.status,
       remainingMs,
       elapsedMs,
       progress,
+      completedLayers,
+      layerBarPercent,
       currentLayer,
       targetLayers: normalized.targetLayers
     };

@@ -64,11 +64,22 @@ select{
 }
 .timer-button.secondary{background:transparent;color:#f0b56d}
 .timer-button[hidden]{display:none}
-.layer-progress{display:flex;justify-content:center;gap:9px;margin-top:25px;overflow-x:auto;padding:3px}
-.layer-step{display:flex;min-width:70px;flex-direction:column;align-items:center;gap:6px;color:#b8977d;font-size:13px}
-.layer-marker{display:grid;width:34px;height:34px;place-items:center;border:2px solid #775136;border-radius:50%;font-weight:750}
-.layer-step.current{color:#f4d4ae}.layer-step.current .layer-marker{border-color:#eca54e;background:#eca54e;color:#251307}
-.layer-step.complete{color:#f0b56d}.layer-step.complete .layer-marker{border-color:#d28a40;background:#5a341c}
+.layer-progress{width:100%;margin-top:27px;padding:3px 34px 24px 0}
+.layer-scale{position:relative;width:100%}
+.layer-track{position:absolute;top:15px;left:0;width:100%;height:5px;border-radius:999px;background:#775136;overflow:hidden}
+.layer-fill{width:0;height:100%;border-radius:inherit;background:#eca54e;transition:width .25s linear}
+.layer-markers{position:relative;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));width:100%}
+.layer-step{position:relative;height:54px;color:#b8977d;font-size:13px}
+.layer-marker{
+  position:absolute;top:0;right:0;transform:translateX(50%);display:grid;width:34px;height:34px;
+  place-items:center;border:2px solid #775136;border-radius:50%;background:#321d10;font-weight:750;
+  transition:border-color .2s,background .2s,color .2s,box-shadow .2s
+}
+.layer-label{position:absolute;top:40px;right:0;transform:translateX(50%);white-space:nowrap}
+.layer-label-short{display:none}
+.layer-step.current{color:#f4d4ae}.layer-step.current .layer-marker{border-color:#eca54e;color:#eca54e}
+.layer-step.complete{color:#f0b56d}.layer-step.complete .layer-marker{border-color:#eca54e;background:#eca54e;color:#251307}
+.layer-step.target .layer-marker{box-shadow:0 0 0 3px #f4d4ae}
 @media(max-width:600px){
   body{padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
   .card{padding:20px 16px;border-radius:18px}
@@ -80,7 +91,9 @@ select{
   .timer-circle{width:190px;height:190px}
   .timer-time{font-size:27px}
   .timer-button{min-width:100px;flex:1 1 120px}
-  .layer-progress{justify-content:flex-start}
+  .layer-progress{padding-right:24px}
+  .layer-label-full{display:none}
+  .layer-label-short{display:inline}
 }
 </style>
 </head>
@@ -123,7 +136,9 @@ select{
       <button class="timer-button" id="timerResume" type="button" hidden>Продолжить</button>
       <button class="timer-button secondary" id="timerReset" type="button" hidden>Сбросить</button>
     </div>
-    <div class="layer-progress" id="layerProgress" aria-label="Прогресс по слоям"></div>
+    <div class="layer-progress" id="layerProgress" role="progressbar"
+         aria-label="Глубина прохождения практики по пяти слоям"
+         aria-valuemin="0" aria-valuemax="5" aria-valuenow="0"></div>
   </section>
 </div>
 

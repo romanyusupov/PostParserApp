@@ -33,6 +33,10 @@ test('Timer controls, circular progress and layer progress are rendered', () => 
   }
   assert.match(html, /\.timer-circle/);
   assert.match(html, /\.layer-progress/);
+  assert.match(html, /role="progressbar"/);
+  assert.match(timerUi, /layer <= 5/);
+  assert.match(timerUi, /className = 'layer-track'/);
+  assert.match(timerUi, /className = 'layer-fill'/);
 });
 
 test('Timer persistence is standalone and does not depend on a network API', () => {
@@ -42,7 +46,7 @@ test('Timer persistence is standalone and does not depend on a network API', () 
 
 test('Service worker pre-caches timer assets within its existing safe scope logic', () => {
   assert.match(serviceWorker, /CACHE_PREFIX = 'easypracticecalc-'/);
-  assert.match(serviceWorker, /2026-08-20-v3/);
+  assert.match(serviceWorker, /2026-08-20-v4/);
   assert.match(serviceWorker, /'\.\/timer_logic\.js'/);
   assert.match(serviceWorker, /'\.\/timer\.js'/);
   assert.match(serviceWorker, /requestUrl\.origin !== self\.location\.origin/);
