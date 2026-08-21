@@ -38,6 +38,37 @@ function storage() {
   };
 }
 
+test('Pace formatter uses one compact M:SS min/km format', () => {
+  assert.equal(Timer.formatPace(8), '7:30 мин/км');
+  assert.equal(Timer.formatPace(7), '8:34 мин/км');
+  assert.equal(Timer.formatPace(6), '10:00 мин/км');
+  assert.equal(Timer.formatPace(5), '12:00 мин/км');
+});
+
+test('Female walk-to-run threshold classifies 6.4 as walking and 6.5 as running', () => {
+  assert.equal(Timer.getMovementKind(6.4, 'female'), 'walking');
+  assert.equal(Timer.getMovementKind(6.5, 'female'), 'running');
+});
+
+test('Male walk-to-run threshold classifies 6.5 as walking and 7 as running', () => {
+  assert.equal(Timer.getMovementKind(6.5, 'male'), 'walking');
+  assert.equal(Timer.getMovementKind(7, 'male'), 'running');
+});
+
+test('Legacy sessions use neutral 7.2 km/h walk-to-run fallback', () => {
+  assert.equal(Timer.getMovementKind(7), 'walking');
+  assert.equal(Timer.getMovementKind(7.5), 'running');
+});
+
+test('Sex is stored once at Workout Session level and survives persistence', () => {
+  const store = storage();
+  const session = Timer.startWorkoutSegment(null, options({sex: 'female'}), 1_000).session;
+  Timer.saveWorkoutSession(store, session);
+  const loaded = Timer.loadWorkoutSession(store, 2_000);
+  assert.equal(loaded.sex, 'female');
+  assert.equal(loaded.currentSegment.sex, undefined);
+});
+
 test('Next is blocked while current segment is running', () => {
   const session = start();
   const before = Timer.getWorkoutSnapshot(session, 601_000);

@@ -31,8 +31,9 @@ test('Timer, sequential segment controls and progress are rendered', () => {
   for (const id of [
     'timerStart', 'timerPause', 'timerResume', 'timerReset', 'timerNext',
     'timerCumulative', 'timerProgress', 'layerProgress', 'segmentHistory',
-    'segmentWarning', 'segmentWarningClose', 'practiceParameters',
-    'parameterToggle', 'parameterPanel', 'parameterSummary'
+    'segmentWarning', 'segmentWarningClose', 'parameterModal',
+    'parameterModalClose', 'parameterModalTitle', 'parameterLockedNotice',
+    'parameterToggle', 'parameterPanel', 'parameterSummary', 'sexFieldset'
   ]) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
@@ -42,16 +43,39 @@ test('Timer, sequential segment controls and progress are rendered', () => {
   assert.match(timerUi, /layer <= 5/);
   assert.match(timerUi, /className = 'layer-track'/);
   assert.match(timerUi, /className = 'layer-fill'/);
-  assert.match(html, /\+ Следующий отрезок/);
+  assert.match(html, /Следующий отрезок/);
   assert.match(html, /Чтобы начать следующий отрезок, завершите текущий с теми же параметрами\./);
   assert.match(timerUi, /textContent = '✓'/);
   assert.doesNotMatch(timerUi, /interrupted|✕/);
-  assert.match(html, /aria-expanded="true" aria-controls="parameterPanel"/);
-  assert.match(html, /\.parameters\.mobile-collapsed \.parameter-panel\{display:none\}/);
-  assert.match(timerUi, /setParametersExpanded\(false\)/);
-  assert.match(timerUi, /setParametersExpanded\(true\)/);
+  assert.match(html, /id="parameterModal" role="dialog" aria-modal="true"/);
+  assert.match(html, /id="timerNext" type="button" hidden/);
+  assert.match(timerUi, /window\.setTimeout\(openParameters, 0\)/);
+  assert.match(timerUi, /showModal\('locked'\)/);
+  assert.match(timerUi, /sessionStatus === 'segment_completed'/);
   assert.match(timerLogic, /completedLayersBeforeSegment/);
   assert.match(timerLogic, /targetCumulativeLayers/);
+});
+
+test('One reusable modal owns the only parameter controls and supports first-load flow', () => {
+  for (const id of ['waterLayer', 'waterTemp', 'moveLayer', 'moveSpeed']) {
+    assert.equal((html.match(new RegExp(`id="${id}"`, 'g')) || []).length, 1);
+  }
+  assert.match(timerUi, /function openParameters\(\)/);
+  assert.match(timerUi, /function closeModal\(\)/);
+  assert.match(timerUi, /document\.body\.classList\.add\('modal-open'\)/);
+  assert.match(html, /Параметры текущего участка нельзя изменить до его завершения/);
+  assert.match(timerUi, /elements\.modal\.hidden = true/);
+  assert.match(timerUi, /elements\.next\.hidden = true/);
+});
+
+test('Movement presentation uses centralized compact pace and safe history icons', () => {
+  assert.match(html, /EasyPracticeTimer\.formatPace\(s\)/);
+  assert.match(html, /EasyPracticeTimer\.formatPace\(moveSpeed\.value\)/);
+  assert.match(timerUi, /Timer\.formatPace\(speed\)/);
+  assert.match(timerUi, /Timer\.formatPace\(parameters\.speed\)/);
+  assert.match(timerUi, /Timer\.getMovementKind\(parameters\.speed/);
+  assert.match(timerUi, /createElementNS\(SVG_NS, 'svg'\)/);
+  assert.doesNotMatch(timerUi, /innerHTML/);
 });
 
 test('Timer persistence is standalone and does not depend on a network API', () => {
@@ -62,7 +86,7 @@ test('Timer persistence is standalone and does not depend on a network API', () 
 
 test('Service worker pre-caches timer assets within its existing safe scope logic', () => {
   assert.match(serviceWorker, /CACHE_PREFIX = 'easypracticecalc-'/);
-  assert.match(serviceWorker, /2026-08-20-v6/);
+  assert.match(serviceWorker, /2026-08-21-v7/);
   assert.match(serviceWorker, /'\.\/timer_logic\.js'/);
   assert.match(serviceWorker, /'\.\/timer\.js'/);
   assert.match(serviceWorker, /requestUrl\.origin !== self\.location\.origin/);

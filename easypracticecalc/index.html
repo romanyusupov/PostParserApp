@@ -131,43 +131,117 @@ select:disabled{opacity:.72;cursor:not-allowed}
   .layer-label-full{display:none}
   .layer-label-short{display:inline}
 }
+/* Premium workout dashboard overrides. Core calculator values and timer geometry stay unchanged. */
+:root{color-scheme:dark;--ink:#120905;--panel:#251208;--panel-2:#32180b;--gold:#ffac3d;--gold-soft:#f3bd75;--line:rgba(255,153,38,.54)}
+html{background:var(--ink)}
+body{padding:calc(14px + env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));background:radial-gradient(circle at 18% 4%,rgba(170,66,10,.24),transparent 30rem),radial-gradient(circle at 85% 46%,rgba(121,45,4,.13),transparent 34rem),linear-gradient(155deg,#170a04,#090504 78%);color:#fff4e7}
+body.modal-open{overflow:hidden}
+button,select{font:inherit}
+.app-shell{width:min(100%,900px);margin:auto}
+.parameter-toggle{display:flex;align-items:center;width:100%;min-height:72px;padding:15px 20px;border:1px solid var(--line);border-radius:24px;background:linear-gradient(115deg,rgba(67,29,10,.96),rgba(18,10,7,.96));box-shadow:0 12px 45px rgba(0,0,0,.28),inset 0 1px rgba(255,190,102,.08);color:#fff;cursor:pointer;text-align:left}
+.parameter-toggle-icon{display:grid;flex:0 0 44px;height:44px;place-items:center;color:var(--gold)}
+.parameter-toggle-icon svg{width:30px;height:30px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.parameter-toggle-copy{display:flex;min-width:0;flex:1;align-items:center;justify-content:space-between;gap:16px}
+.parameter-toggle-label{color:#ffd08a;font-size:clamp(20px,4vw,27px);font-weight:800}
+.parameter-summary{min-width:0;color:#f8e4ca;font-size:clamp(14px,3.2vw,18px);text-align:right;overflow-wrap:anywhere}
+.timer-card{position:relative;overflow:hidden;margin-top:18px;padding:26px 28px 28px;border:1px solid var(--line);border-radius:28px;background:radial-gradient(circle at 50% 18%,rgba(179,73,10,.28),transparent 48%),linear-gradient(145deg,rgba(50,23,9,.98),rgba(20,10,6,.98));box-shadow:0 22px 70px rgba(0,0,0,.38),inset 0 1px rgba(255,188,92,.08);text-align:center}
+.timer-heading{margin:0;color:#ffc36e;font-size:clamp(24px,5.2vw,36px);font-weight:850;letter-spacing:.01em}
+.timer-status{min-height:27px;margin:5px 0 15px;color:#f5c98f;font-size:clamp(16px,3.4vw,21px)}
+.timer-circle{width:clamp(220px,52vw,330px);height:clamp(220px,52vw,330px);filter:drop-shadow(0 0 24px rgba(255,139,20,.2))}
+.timer-circle::before{content:"";position:absolute;inset:18%;border-radius:50%;background:radial-gradient(circle at 50% 42%,rgba(255,171,61,.13),transparent 48%),linear-gradient(145deg,#281207,#100906);box-shadow:inset 0 0 35px rgba(255,142,31,.14)}
+.timer-circle svg{position:relative;z-index:1}
+.timer-track,.timer-progress{stroke-width:10}
+.timer-track{stroke:rgba(255,237,213,.13)}
+.timer-progress{stroke:#ffad3e;filter:drop-shadow(0 0 7px rgba(255,143,24,.8))}
+.timer-center{z-index:2}
+.timer-time{color:#fff;font-size:clamp(36px,9vw,61px);font-weight:850;text-shadow:0 0 18px rgba(255,151,39,.4)}
+.timer-cumulative{margin:13px 0 0;color:#efc28b;font-size:clamp(16px,3.4vw,21px)}
+.timer-cumulative strong{color:#ffaf45;font-weight:850}
+.timer-actions{gap:12px;margin-top:22px}
+.timer-button{display:inline-flex;min-height:56px;align-items:center;justify-content:center;gap:10px;border-radius:17px;padding:13px 22px;border-color:#f49328;background:linear-gradient(135deg,#ffb64e,#ff9324);box-shadow:0 8px 25px rgba(232,101,8,.22),inset 0 1px rgba(255,255,255,.28);color:#281005;font-size:18px;font-weight:800}
+.timer-button.secondary{background:linear-gradient(145deg,rgba(50,22,8,.82),rgba(22,11,7,.92));box-shadow:none;color:#ffc16c}
+.button-icon{display:inline-grid;width:27px;height:27px;place-items:center;font-size:25px;line-height:1}
+.button-icon svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round}
+.timer-actions .timer-button{flex:1 1 180px}
+.next-segment-button{min-height:58px;margin-top:14px;background:linear-gradient(145deg,rgba(54,25,10,.92),rgba(25,12,7,.96));box-shadow:none;color:#ffc16c}
+.next-segment-button:not(.secondary){background:linear-gradient(135deg,#ffb64e,#ff9324);color:#281005}
+.layer-progress{margin-top:25px;padding:3px 34px 25px 0}
+.layer-track{height:4px;background:#6c3b20}
+.layer-fill{background:linear-gradient(90deg,#f69027,#ffc05a);box-shadow:0 0 10px rgba(255,158,45,.65)}
+.layer-marker{width:38px;height:38px;border-color:#794322;background:#241108;color:#d4a36d}
+.layer-step.current .layer-marker{border-color:#ffae3f;color:#ffd28c;box-shadow:0 0 0 4px rgba(255,151,34,.17),0 0 18px rgba(255,138,17,.5)}
+.layer-step.complete .layer-marker{border-color:#ffc05c;background:linear-gradient(145deg,#ffc25f,#ee8d22);color:#271006}
+.layer-step.target .layer-marker{box-shadow:0 0 0 4px rgba(255,193,96,.28),0 0 20px rgba(255,139,20,.72)}
+.segment-history{margin-top:24px;padding:20px 16px;border:1px solid rgba(226,125,30,.25);border-radius:26px;background:linear-gradient(145deg,rgba(39,18,8,.9),rgba(15,8,5,.92))}
+.segment-history h3{margin:0 0 14px;color:#ffc16d;font-size:24px}
+.segment-list{gap:11px}
+.segment-item{display:grid;grid-template-columns:52px minmax(0,1fr) 46px;align-items:center;gap:13px;padding:13px 15px;border:1px solid rgba(237,130,28,.47);border-radius:20px;background:linear-gradient(110deg,rgba(71,31,9,.84),rgba(29,14,8,.92));font-size:15px}
+.segment-type-icon,.segment-check{display:grid;width:46px;height:46px;place-items:center;border:1px solid rgba(255,151,36,.6);border-radius:50%;background:radial-gradient(circle,rgba(164,69,8,.42),rgba(35,15,7,.95));box-shadow:0 0 16px rgba(255,128,14,.15);color:#ffae3d}
+.segment-type-icon svg,.segment-check svg{width:27px;height:27px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.segment-copy{min-width:0}
+.segment-primary{display:block;color:#ffe0b5;font-size:16px;font-weight:720}
+.segment-secondary{display:block;margin-top:3px;color:#d7b18d;font-size:14px}
+.segment-check{margin-left:0;color:#ffc15c;font-size:25px;font-weight:900}
+.parameter-modal[hidden],.segment-warning[hidden]{display:none}
+.parameter-modal,.segment-warning{position:fixed;z-index:30;inset:0;display:grid;place-items:center;padding:max(18px,env(safe-area-inset-top)) 16px max(18px,env(safe-area-inset-bottom));background:rgba(9,4,2,.78);backdrop-filter:blur(8px)}
+.parameter-modal-card{position:relative;width:min(100%,590px);max-height:min(760px,calc(100dvh - 36px));overflow:auto;padding:28px;border:1px solid #df7f22;border-radius:26px;background:radial-gradient(circle at 20% 0,rgba(151,61,8,.25),transparent 45%),linear-gradient(150deg,#32180b,#160b06 80%);box-shadow:0 30px 90px rgba(0,0,0,.62),0 0 35px rgba(210,86,5,.14)}
+.modal-close{position:absolute;top:12px;right:12px;display:grid;width:44px;height:44px;place-items:center;border:0;border-radius:50%;background:rgba(255,166,58,.1);color:#ffd59c;font-size:31px;cursor:pointer}
+.modal-title{margin:0 45px 22px 0;color:#ffc16d;font-size:clamp(23px,5vw,31px)}
+.modal-locked-notice{margin:0 0 18px;padding:12px 14px;border:1px solid rgba(242,151,58,.35);border-radius:13px;background:rgba(255,166,58,.08);color:#f6d2a6;line-height:1.4}
+.modal-locked-notice[hidden]{display:none}
+.sex-fieldset{margin:0 0 19px;padding:0;border:0}
+.sex-fieldset legend{margin-bottom:8px;color:#edb975}
+.sex-options{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.sex-option{min-height:48px;border:1px solid #9b5425;border-radius:14px;background:#201008;color:#ebc493;cursor:pointer}
+.sex-option[aria-pressed="true"]{border-color:#ffad40;background:linear-gradient(135deg,#f6a63e,#e87e1b);color:#261006;font-weight:800}
+.sex-option:disabled{opacity:.72;cursor:not-allowed}
+.parameter-panel{display:block;padding:0}
+.tabs{margin-bottom:18px}
+.tab{display:flex;align-items:center;justify-content:center;min-height:50px;padding:11px 18px;border-radius:15px}
+.controls{gap:14px}
+.controls>div{flex-basis:220px}
+label{color:#efbd7d}
+select{min-height:51px;border-color:#9f5828;background:#1c0e07}
+.result{margin:17px 0 0;padding:15px;border:1px solid rgba(255,176,66,.4);background:rgba(255,165,47,.12);color:#ffd494;font-size:18px}
+.modal-start{width:100%;margin-top:20px}
+.segment-warning{z-index:40}
+.segment-warning-card{border-color:#df7f22;background:linear-gradient(150deg,#3b1c0d,#1b0d07)}
+@media(max-width:600px){
+  body{padding-top:max(8px,env(safe-area-inset-top));padding-bottom:max(12px,env(safe-area-inset-bottom))}
+  .app-shell{width:100%}
+  .parameter-toggle{min-height:61px;padding:10px 13px;border-radius:19px}
+  .parameter-toggle-icon{flex-basis:38px;height:38px}.parameter-toggle-icon svg{width:27px;height:27px}
+  .parameter-toggle-copy{gap:9px}.parameter-toggle-label{font-size:19px}.parameter-summary{max-width:56%;font-size:13px;line-height:1.25}
+  .timer-card{margin-top:10px;padding:14px 10px 16px;border-radius:22px}
+  .timer-heading{font-size:22px}.timer-status{margin-bottom:4px;font-size:14px;min-height:20px}
+  .timer-circle{width:clamp(184px,51vw,220px);height:clamp(184px,51vw,220px)}
+  .timer-time{font-size:clamp(31px,9vw,41px)}
+  .timer-cumulative{margin-top:3px;font-size:14px}
+  .timer-actions{margin-top:10px;gap:8px}.timer-actions .timer-button{min-height:49px;flex-basis:120px;padding:9px 12px;font-size:16px}
+  .next-segment-button{min-height:49px;margin-top:9px;padding:9px 12px;font-size:16px}
+  .layer-progress{margin-top:14px;padding-right:20px;padding-bottom:17px}
+  .layer-marker{width:31px;height:31px;font-size:12px}.layer-track{top:13px}.layer-label{top:35px}
+  .segment-history{margin-top:12px;padding:15px 10px;border-radius:21px}.segment-history h3{font-size:20px}
+  .segment-item{grid-template-columns:44px minmax(0,1fr) 40px;padding:10px;gap:9px}.segment-type-icon,.segment-check{width:40px;height:40px}.segment-type-icon svg,.segment-check svg{width:23px;height:23px}.segment-primary{font-size:14px}.segment-secondary{font-size:13px}
+  .parameter-modal{align-items:end;padding:8px 8px max(8px,env(safe-area-inset-bottom))}
+  .parameter-modal-card{max-height:calc(100dvh - max(16px,env(safe-area-inset-top)));padding:23px 17px 18px;border-radius:24px 24px 18px 18px}
+  .modal-title{font-size:23px}.controls{display:grid}.tabs{margin-bottom:13px}.result{font-size:16px}.modal-start{min-height:52px;margin-top:15px}
+}
+@media(max-width:375px){.timer-circle{width:180px;height:180px}.timer-card{padding-left:8px;padding-right:8px}.timer-heading{font-size:20px}.parameter-toggle-label{font-size:18px}.layer-progress{margin-top:11px}}
 </style>
 </head>
 <body>
-<div class="card">
-  <section class="parameters" id="practiceParameters">
-    <button class="parameter-toggle" id="parameterToggle" type="button"
-            aria-expanded="true" aria-controls="parameterPanel">
+<main class="app-shell">
+  <button class="parameter-toggle" id="parameterToggle" type="button" aria-haspopup="dialog" aria-controls="parameterModal">
+    <span class="parameter-toggle-icon" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M5 8h22M5 16h22M5 24h22"/><circle cx="21" cy="8" r="3"/><circle cx="11" cy="16" r="3"/><circle cx="23" cy="24" r="3"/></svg></span>
+    <span class="parameter-toggle-copy">
       <span class="parameter-toggle-label">Параметры</span>
-      <span class="parameter-summary" id="parameterSummary"></span>
-    </button>
-    <div class="parameter-panel" id="parameterPanel">
-      <div class="tabs">
-        <div class="tab active" data-practice="water" onclick="openTab('water',this)">Вода</div>
-        <div class="tab" data-practice="move" onclick="openTab('move',this)">Ходьба/бег</div>
-      </div>
-
-      <div id="water" class="panel active">
-        <div class="controls">
-          <div><label>Дополнительные слои</label><select id="waterLayer"></select></div>
-          <div><label>Температура воды</label><select id="waterTemp"></select></div>
-        </div>
-        <div class="result" id="waterResult"></div>
-      </div>
-
-      <div id="move" class="panel">
-        <div class="controls">
-          <div><label>Дополнительные слои</label><select id="moveLayer"></select></div>
-          <div><label>Скорость движения</label><select id="moveSpeed"></select></div>
-        </div>
-        <div class="result" id="moveResult"></div>
-      </div>
-    </div>
-  </section>
-
+      <span class="parameter-summary" id="parameterSummary">Параметры не заданы</span>
+    </span>
+  </button>
   <section class="timer-card" id="timerCard" aria-labelledby="timerPractice">
-    <h2 class="timer-heading" id="timerPractice">Вода</h2>
-    <p class="timer-status" id="timerStatus" aria-live="polite">Готово к запуску</p>
+    <h1 class="timer-heading" id="timerPractice">Новая тренировка</h1>
+    <p class="timer-status" id="timerStatus" aria-live="polite">Настройте первый участок</p>
     <div class="timer-circle">
       <svg viewBox="0 0 220 220" aria-hidden="true">
         <circle class="timer-track" cx="110" cy="110" r="94"></circle>
@@ -177,20 +251,55 @@ select:disabled{opacity:.72;cursor:not-allowed}
     </div>
     <p class="timer-cumulative">Суммарное время: <strong id="timerCumulative">00:00:00</strong></p>
     <div class="timer-actions">
-      <button class="timer-button" id="timerStart" type="button">Начать отрезок 1</button>
-      <button class="timer-button" id="timerPause" type="button" hidden>Пауза</button>
-      <button class="timer-button" id="timerResume" type="button" hidden>Продолжить</button>
-      <button class="timer-button secondary" id="timerReset" type="button" hidden>Сбросить</button>
+      <button class="timer-button" id="timerPause" type="button" hidden><span class="button-icon" aria-hidden="true">Ⅱ</span><span>Пауза</span></button>
+      <button class="timer-button" id="timerResume" type="button" hidden><span class="button-icon" aria-hidden="true">▶</span><span>Продолжить</span></button>
+      <button class="timer-button secondary" id="timerReset" type="button" hidden><span class="button-icon" aria-hidden="true"><svg viewBox="0 0 28 28"><path d="M23 9V3l-3 3a10 10 0 1 0 2.5 10"/></svg></span><span>Сбросить</span></button>
     </div>
-    <button class="timer-button next-segment-button" id="timerNext" type="button" hidden>+ Следующий отрезок</button>
+    <button class="timer-button next-segment-button" id="timerNext" type="button" hidden><span class="button-icon" aria-hidden="true">⊕</span><span class="next-segment-label">Следующий отрезок</span></button>
     <div class="layer-progress" id="layerProgress" role="progressbar"
          aria-label="Глубина прохождения практики по пяти слоям"
          aria-valuemin="0" aria-valuemax="5" aria-valuenow="0"></div>
-    <section class="segment-history" id="segmentHistory" hidden>
-      <h3>Отрезки тренировки</h3>
-      <ol class="segment-list" id="segmentList"></ol>
-    </section>
   </section>
+  <section class="segment-history" id="segmentHistory" hidden>
+    <h2>Отрезки тренировки</h2>
+    <ol class="segment-list" id="segmentList"></ol>
+  </section>
+</main>
+
+<div class="parameter-modal" id="parameterModal" role="dialog" aria-modal="true" aria-labelledby="parameterModalTitle" hidden>
+  <div class="parameter-modal-card" tabindex="-1">
+    <button class="modal-close" id="parameterModalClose" type="button" aria-label="Закрыть параметры">×</button>
+    <h2 class="modal-title" id="parameterModalTitle">Введите параметры первого участка тренировки</h2>
+    <p class="modal-locked-notice" id="parameterLockedNotice" hidden>Параметры текущего участка нельзя изменить до его завершения.</p>
+    <fieldset class="sex-fieldset" id="sexFieldset">
+      <legend>Пол</legend>
+      <div class="sex-options">
+        <button class="sex-option" type="button" data-sex="male" aria-pressed="false">Мужчина</button>
+        <button class="sex-option" type="button" data-sex="female" aria-pressed="false">Женщина</button>
+      </div>
+    </fieldset>
+    <div class="parameter-panel" id="parameterPanel">
+      <div class="tabs" role="tablist" aria-label="Практика">
+        <button class="tab active" type="button" role="tab" aria-selected="true" data-practice="move" onclick="openTab('move',this)">Ходьба/бег</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" data-practice="water" onclick="openTab('water',this)">Вода</button>
+      </div>
+      <div id="water" class="panel" role="tabpanel">
+        <div class="controls">
+          <div><label for="waterLayer">Дополнительные слои</label><select id="waterLayer"></select></div>
+          <div><label for="waterTemp">Температура воды</label><select id="waterTemp"></select></div>
+        </div>
+        <div class="result" id="waterResult"></div>
+      </div>
+      <div id="move" class="panel active" role="tabpanel">
+        <div class="controls">
+          <div><label for="moveLayer">Дополнительные слои</label><select id="moveLayer"></select></div>
+          <div><label for="moveSpeed">Скорость движения</label><select id="moveSpeed"></select></div>
+        </div>
+        <div class="result" id="moveResult"></div>
+      </div>
+    </div>
+    <button class="timer-button modal-start" id="timerStart" type="button">Запустить участок 1</button>
+  </div>
 </div>
 
 <div class="segment-warning" id="segmentWarning" role="alertdialog" aria-modal="true"
@@ -201,6 +310,7 @@ select:disabled{opacity:.72;cursor:not-allowed}
   </div>
 </div>
 
+<script src="./timer_logic.js"></script>
 <script>
 const waterData={"28":{"1":14.6,"2":29.1,"3":43.6,"4":58.1,"5":72.7},"27":{"1":13.1,"2":26.1,"3":39.2,"4":52.2,"5":65.2},"26":{"1":11.8,"2":23.5,"3":35.2,"4":46.9,"5":58.6},"25":{"1":10.6,"2":21.1,"3":31.6,"4":42.1,"5":52.6},"24":{"1":9.5,"2":18.9,"3":28.3,"4":37.8,"5":47.2},"23":{"1":8.5,"2":17.0,"3":25.4,"4":33.9,"5":42.4},"22":{"1":7.6,"2":15.2,"3":22.8,"4":30.4,"5":38.0},"21":{"1":6.9,"2":13.7,"3":20.5,"4":27.3,"5":34.2},"20":{"1":6.2,"2":12.3,"3":18.4,"4":24.5,"5":30.7},"19":{"1":5.5,"2":11.0,"3":16.5,"4":22.0,"5":27.5},"18":{"1":5.0,"2":9.9,"3":14.8,"4":19.8,"5":24.7},"17":{"1":4.5,"2":8.9,"3":13.3,"4":17.8,"5":22.2},"16":{"1":4.0,"2":8.0,"3":12.0,"4":15.9,"5":19.9},"15":{"1":3.6,"2":7.2,"3":10.8,"4":14.3,"5":17.9},"14":{"1":3.3,"2":6.5,"3":9.7,"4":12.9,"5":16.1},"13":{"1":2.9,"2":5.8,"3":8.7,"4":11.5,"5":14.4},"12":{"1":2.6,"2":5.2,"3":7.8,"4":10.4,"5":13.0},"11":{"1":2.4,"2":4.7,"3":7.0,"4":9.3,"5":11.6},"10":{"1":2.1,"2":4.2,"3":6.3,"4":8.4,"5":10.4},"9":{"1":1.9,"2":3.8,"3":5.6,"4":7.5,"5":9.4},"8":{"1":1.7,"2":3.4,"3":5.1,"4":6.8,"5":8.4},"7":{"1":1.6,"2":3.1,"3":4.6,"4":6.1,"5":7.6},"6":{"1":1.4,"2":2.7,"3":4.1,"4":5.4,"5":6.8},"5":{"1":1.3,"2":2.5,"3":3.7,"4":4.9,"5":6.1},"4":{"1":1.1,"2":2.2,"3":3.3,"4":4.4,"5":5.5}};
 const moveData={"4.0":{"1":65.2,"2":130.4,"3":195.5,"4":260.7,"5":325.9},"4.1":{"1":63.2,"2":126.4,"3":189.6,"4":252.8,"5":316.0},"4.2":{"1":61.4,"2":122.7,"3":184.0,"4":245.4,"5":306.7},"4.3":{"1":59.6,"2":119.2,"3":178.7,"4":238.3,"5":297.8},"4.4":{"1":57.9,"2":115.8,"3":173.6,"4":231.5,"5":289.3},"4.5":{"1":56.3,"2":112.5,"3":168.8,"4":225.0,"5":281.3},"4.6":{"1":54.7,"2":109.4,"3":164.1,"4":218.8,"5":273.5},"4.7":{"1":53.3,"2":106.5,"3":159.7,"4":212.9,"5":266.1},"4.8":{"1":51.9,"2":103.7,"3":155.5,"4":207.3,"5":259.1},"4.9":{"1":50.5,"2":101.0,"3":151.4,"4":201.9,"5":252.3},"5.0":{"1":49.2,"2":98.4,"3":147.5,"4":196.7,"5":245.8},"5.5":{"1":43.5,"2":86.9,"3":130.3,"4":173.7,"5":217.1},"6.0":{"1":38.7,"2":77.4,"3":116.0,"4":154.7,"5":193.4},"6.5":{"1":34.7,"2":69.4,"3":104.1,"4":138.8,"5":173.4},"7.0":{"1":31.3,"2":62.6,"3":93.9,"4":125.2,"5":156.5},"7.5":{"1":28.4,"2":56.8,"3":85.2,"4":113.6,"5":142.0},"8.0":{"1":25.9,"2":51.8,"3":77.7,"4":103.6,"5":129.5},"8.5":{"1":23.7,"2":47.4,"3":71.1,"4":94.8,"5":118.5},"9.0":{"1":21.8,"2":43.6,"3":65.4,"4":87.1,"5":108.9},"9.5":{"1":20.1,"2":40.2,"3":60.2,"4":80.3,"5":100.4},"10.0":{"1":18.6,"2":37.1,"3":55.7,"4":74.2,"5":92.8},"10.5":{"1":17.2,"2":34.4,"3":51.6,"4":68.8,"5":86.0},"11.0":{"1":16.0,"2":32.0,"3":48.0,"4":64.0,"5":79.9},"11.5":{"1":14.9,"2":29.8,"3":44.7,"4":59.6,"5":74.4},"12.0":{"1":13.9,"2":27.8,"3":41.7,"4":55.6,"5":69.5},"12.5":{"1":13.0,"2":26.0,"3":39.0,"4":52.0,"5":65.0},"13.0":{"1":12.2,"2":24.4,"3":36.5,"4":48.7,"5":60.9},"13.5":{"1":11.5,"2":22.9,"3":34.3,"4":45.7,"5":57.1},"14.0":{"1":10.8,"2":21.5,"3":32.2,"4":42.9,"5":53.7},"14.5":{"1":10.1,"2":20.2,"3":30.3,"4":40.4,"5":50.5},"15.0":{"1":9.6,"2":19.1,"3":28.6,"4":38.1,"5":47.6},"15.5":{"1":9.0,"2":18.0,"3":27.0,"4":35.9,"5":44.9},"16.0":{"1":8.5,"2":17.0,"3":25.5,"4":33.9,"5":42.4},"16.5":{"1":8.1,"2":16.1,"3":24.1,"4":32.1,"5":40.1},"17.0":{"1":7.6,"2":15.2,"3":22.8,"4":30.4,"5":38.0},"17.5":{"1":7.2,"2":14.4,"3":21.6,"4":28.8,"5":36.0},"18.0":{"1":6.9,"2":13.7,"3":20.5,"4":27.3,"5":34.2},"18.5":{"1":6.5,"2":13.0,"3":19.5,"4":26.0,"5":32.4},"19.0":{"1":6.2,"2":12.4,"3":18.5,"4":24.7,"5":30.8},"19.5":{"1":5.9,"2":11.8,"3":17.6,"4":23.5,"5":29.3},"20.0":{"1":5.6,"2":11.2,"3":16.8,"4":22.3,"5":27.9},"20.5":{"1":5.4,"2":10.7,"3":16.0,"4":21.3,"5":26.6},"21.0":{"1":5.1,"2":10.2,"3":15.2,"4":20.3,"5":25.4},"21.5":{"1":4.9,"2":9.7,"3":14.5,"4":19.4,"5":24.2},"22.0":{"1":4.7,"2":9.3,"3":13.9,"4":18.5,"5":23.1}};
@@ -214,6 +324,7 @@ function openTab(id,el){
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   el.classList.add('active');
+  document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected',String(x===el)));
 }
 
 function fill(){
@@ -223,8 +334,7 @@ function fill(){
     moveLayer.innerHTML+=`<option value="${i}">${i} слой</option>`;
   }
   Object.keys(moveData).forEach(s=>{
-    let pace=60/Number(s), m=Math.floor(pace), sec=Math.round((pace-m)*60);
-    moveSpeed.innerHTML+=`<option value="${s}">${s} км/ч · ${sec?m+' мин '+sec+' сек/км':m+' мин/км'}</option>`;
+    moveSpeed.innerHTML+=`<option value="${s}">${s} км/ч · ${EasyPracticeTimer.formatPace(s)}</option>`;
   });
 }
 
@@ -234,12 +344,12 @@ function ft(t){
 }
 
 function updateWater(){
-  waterResult.innerHTML='Время: '+ft(waterData[waterTemp.value][waterLayer.value]);
+  waterResult.innerHTML='Время участка: '+ft(waterData[waterTemp.value][waterLayer.value]);
 }
 function updateMove(){
   let t=moveData[moveSpeed.value][moveLayer.value];
   let d=Number(moveSpeed.value)*t/60;
-  moveResult.innerHTML='Время: '+ft(t)+'<br>Дистанция: '+d.toFixed(3)+' км';
+  moveResult.innerHTML='Время участка: '+ft(t)+'<br>Темп: '+EasyPracticeTimer.formatPace(moveSpeed.value)+'<br>Дистанция: '+d.toFixed(3)+' км';
 }
 
 waterTemp.onchange=updateWater;
@@ -255,7 +365,6 @@ if ('serviceWorker' in navigator) {
   });
 }
 </script>
-<script src="./timer_logic.js"></script>
 <script src="./timer.js"></script>
 </body>
 </html>

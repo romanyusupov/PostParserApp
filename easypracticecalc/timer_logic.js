@@ -9,6 +9,7 @@
   const STORAGE_KEY = 'easypracticecalc.timerState.v1';
   const SESSION_VERSION = 2;
   const SESSION_STORAGE_KEY = 'easypracticecalc.workoutSession.v2';
+  const WALK_RUN_TRANSITION_KMH = Object.freeze({female: 6.48, male: 6.84, neutral: 7.2});
   const VALID_STATUSES = new Set(['running', 'paused', 'finished']);
   const VALID_PRACTICES = new Set(['water', 'move']);
   const VALID_SESSION_STATUSES = new Set([
@@ -20,6 +21,29 @@
 
   function clamp(value, minimum, maximum) {
     return Math.min(maximum, Math.max(minimum, value));
+  }
+
+  function normalizeSex(value) {
+    return value === 'female' || value === 'male' ? value : null;
+  }
+
+  function formatPace(speedKmh) {
+    const speed = Number(speedKmh);
+    if (!Number.isFinite(speed) || speed <= 0) return '—';
+    const totalSeconds = Math.round(3600 / speed);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${String(seconds).padStart(2, '0')} мин/км`;
+  }
+
+  // Gill et al., Gait & Posture (2022), PMID 35994952. This is a UI heuristic only.
+  function getMovementKind(speedKmh, sex) {
+    const speed = Number(speedKmh);
+    const normalizedSex = normalizeSex(sex);
+    const threshold = normalizedSex
+      ? WALK_RUN_TRANSITION_KMH[normalizedSex]
+      : WALK_RUN_TRANSITION_KMH.neutral;
+    return Number.isFinite(speed) && speed >= threshold ? 'running' : 'walking';
   }
 
   function normalizeState(value) {
@@ -250,6 +274,7 @@
     }
     return {
       version: SESSION_VERSION,
+      sex: normalizeSex(value.sex),
       sessionStatus: value.sessionStatus,
       completedSegments,
       currentSegment,
@@ -390,6 +415,7 @@
         started: true,
         session: {
           version: SESSION_VERSION,
+          sex: normalizeSex(options.sex),
           sessionStatus: 'running',
           completedSegments: [],
           currentSegment,
@@ -501,6 +527,7 @@
     const segmentStatus = legacy.status === 'finished' ? 'completed' : legacy.status;
     let session = {
       version: SESSION_VERSION,
+      sex: null,
       sessionStatus: segmentStatus === 'completed' ? 'segment_completed' : segmentStatus,
       completedSegments: [],
       currentSegment: {
@@ -573,6 +600,7 @@
     STORAGE_KEY,
     SESSION_VERSION,
     SESSION_STORAGE_KEY,
+    WALK_RUN_TRANSITION_KMH,
     normalizeState,
     createTimerState,
     getTimerSnapshot,
@@ -597,6 +625,8 @@
     saveWorkoutSession,
     clearWorkoutSession,
     formatRemaining,
-    formatElapsed
+    formatElapsed,
+    formatPace,
+    getMovementKind
   };
 });
