@@ -7,21 +7,39 @@
   const circumference = 2 * Math.PI * radius;
   const warningMessage = 'Чтобы начать следующий отрезок, завершите текущий с теми же параметрами.';
   const allLayersMessage = 'Все 5 слоёв пройдены.';
-  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const HISTORY_ICON_SOURCES = Object.freeze({
+    water: './assets/history-water.webp',
+    walking: './assets/history-walking.webp',
+    running: './assets/history-running.webp'
+  });
+  const TIMER_BACKDROP_SOURCES = Object.freeze({
+    'water:female': './assets/timer-water-female.webp',
+    'water:male': './assets/timer-water-male.webp',
+    'move:female': './assets/timer-move-female.webp',
+    'move:male': './assets/timer-move-male.webp'
+  });
   const elements = {
     parameterToggle: document.getElementById('parameterToggle'), parameterSummary: document.getElementById('parameterSummary'),
     modal: document.getElementById('parameterModal'), modalClose: document.getElementById('parameterModalClose'),
     modalTitle: document.getElementById('parameterModalTitle'), lockedNotice: document.getElementById('parameterLockedNotice'),
     sexFieldset: document.getElementById('sexFieldset'), sexButtons: Array.from(document.querySelectorAll('.sex-option')),
     practice: document.getElementById('timerPractice'), status: document.getElementById('timerStatus'),
+    backdrop: document.getElementById('timerBackdrop'),
     time: document.getElementById('timerTime'), cumulative: document.getElementById('timerCumulative'),
-    progress: document.getElementById('timerProgress'), layers: document.getElementById('layerProgress'),
+    overtime: document.getElementById('timerOvertime'),
+    progress: document.getElementById('timerProgress'), progressGlow: document.getElementById('timerProgressGlow'),
+    progressHighlight: document.getElementById('timerProgressHighlight'), progressLead: document.getElementById('timerProgressLead'),
+    layers: document.getElementById('layerProgress'),
     start: document.getElementById('timerStart'), pause: document.getElementById('timerPause'),
     resume: document.getElementById('timerResume'), reset: document.getElementById('timerReset'),
-    next: document.getElementById('timerNext'), nextLabel: document.querySelector('.next-segment-label'),
+    next: document.getElementById('timerNext'), nextIcon: document.getElementById('timerNextIcon'),
+    nextLabel: document.querySelector('.next-segment-label'),
     history: document.getElementById('segmentHistory'), segmentList: document.getElementById('segmentList'),
     warning: document.getElementById('segmentWarning'), warningText: document.getElementById('segmentWarningText'),
-    warningClose: document.getElementById('segmentWarningClose')
+    warningClose: document.getElementById('segmentWarningClose'),
+    resetConfirmation: document.getElementById('resetConfirmation'),
+    resetConfirmationCancel: document.getElementById('resetConfirmationCancel'),
+    resetConfirmationConfirm: document.getElementById('resetConfirmationConfirm')
   };
 
   let workoutSession = Timer.loadWorkoutSession(storage, Date.now());
@@ -29,7 +47,21 @@
   let renderInterval = null;
   let modalReturnFocus = null;
   let warningReturnFocus = null;
-  elements.progress.style.strokeDasharray = String(circumference);
+  let resetReturnFocus = null;
+  [elements.progress, elements.progressGlow, elements.progressHighlight].forEach(element => {
+    element.style.strokeDasharray = String(circumference);
+  });
+  elements.progressLead.style.strokeDasharray = `1 ${circumference - 1}`;
+
+  function setTimerProgress(progress) {
+    const safeProgress = Math.max(0, Math.min(1, Number(progress) || 0));
+    const offset = circumference * (1 - safeProgress);
+    elements.progress.style.strokeDashoffset = String(offset);
+    elements.progressGlow.style.strokeDashoffset = String(offset);
+    elements.progressHighlight.style.strokeDashoffset = String(offset);
+    elements.progressLead.style.strokeDashoffset = String(-circumference * safeProgress);
+    elements.progressLead.style.opacity = safeProgress > 0 ? '1' : '0';
+  }
 
   function createSegmentId() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
@@ -37,6 +69,23 @@
   }
 
   function activePractice() { return document.querySelector('.panel.active').id; }
+
+  function setTimerBackdrop(descriptor) {
+    const sex = workoutSession ? workoutSession.sex : pendingSex;
+    const key = descriptor && sex ? `${descriptor.practiceType}:${sex}` : '';
+    const source = TIMER_BACKDROP_SOURCES[key];
+    if (!source) {
+      elements.backdrop.hidden = true;
+      elements.backdrop.removeAttribute('src');
+      elements.backdrop.dataset.source = '';
+      return;
+    }
+    if (elements.backdrop.dataset.source !== source) {
+      elements.backdrop.src = source;
+      elements.backdrop.dataset.source = source;
+    }
+    elements.backdrop.hidden = false;
+  }
 
   function selectPractice(practiceType) {
     const type = practiceType === 'move' ? 'move' : 'water';
@@ -71,7 +120,7 @@
   function sessionSnapshot(now) { return workoutSession ? Timer.getWorkoutSnapshot(workoutSession, now || Date.now()) : null; }
 
   function limitLayerSelectors(maximum) {
-    const safeMaximum = Math.max(1, Math.min(5, Number(maximum) || 1));
+    const safeMaximum = Math.max(1, Math.min(5, Math.ceil(Number(maximum) || 1)));
     [waterLayer, moveLayer].forEach(select => {
       Array.from(select.options).forEach(option => {
         const unavailable = Number(option.value) > safeMaximum;
@@ -97,6 +146,9 @@
   function setSex(value) {
     pendingSex = value === 'female' || value === 'male' ? value : null;
     elements.sexButtons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.sex === pendingSex)));
+    if (!workoutSession || workoutSession.sessionStatus === 'configuring_next_segment') {
+      setTimerBackdrop(workoutSession ? workoutSession.draftSegment : pendingSex ? practiceOptions(activePractice()) : null);
+    }
     updateModalStartState();
   }
 
@@ -133,13 +185,18 @@
     return `${minutes}:${String(seconds).padStart(2, '0')}`;
   }
 
+  function formatLayerAmount(value) {
+    return Number(value || 0).toFixed(2).replace(/0+$/, '').replace(/\.$/, '').replace('.', ',');
+  }
+
   function descriptorSummary(descriptor) {
     if (!descriptor) return 'Параметры не заданы';
     const parameters = descriptor.parameters || {};
     const layers = Number(descriptor.segmentLayers || descriptor.targetLayers || parameters.layer || 1);
     if (descriptor.practiceType === 'move') {
       const speed = Number(parameters.speed || moveSpeed.value);
-      return `${layerText(layers)} · ${speed} км/ч · ${Timer.formatPace(speed)}`;
+      const compactPace = Timer.formatPace(speed).replace(' мин/км', '/км');
+      return `${layerText(layers)} · ${speed} км/ч · ${compactPace}`;
     }
     return `${layerText(layers)} · ${parameters.temperature || waterTemp.value} °C`;
   }
@@ -160,7 +217,7 @@
     for (let layer = 1; layer <= 5; layer += 1) {
       const item = document.createElement('div'); item.className = 'layer-step';
       if (completedLayers >= layer) item.classList.add('complete');
-      if (snapshot && snapshot.status !== 'completed' && layer === snapshot.currentLayer) item.classList.add('current');
+      if (snapshot && completedLayers < 5 && layer === snapshot.currentLayer) item.classList.add('current');
       if (layer === targetLayers) item.classList.add('target');
       const marker = document.createElement('span'); marker.className = 'layer-marker'; marker.textContent = String(layer);
       const label = document.createElement('span'); label.className = 'layer-label';
@@ -172,22 +229,11 @@
     scale.append(track, markers); elements.layers.appendChild(scale);
   }
 
-  function svgIcon(kind) {
-    const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', '0 0 32 32');
-    const paths = kind === 'water'
-      ? ['M16 3C11 10 7 14 7 20a9 9 0 0 0 18 0c0-6-4-10-9-17Z', 'M11 21c1 3 3 4 6 4']
-      : kind === 'running'
-        ? ['M19 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z', 'm14 11 5 2 4-2', 'm14 11-3 7-5 5', 'm12 17 6 3 4 7', 'm14 11-5 2']
-        : ['M18 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z', 'm14 11 4 5 5 2', 'm14 11-2 8-4 7', 'm12 19 6 2 3 6', 'm14 12-5 4'];
-    paths.forEach(data => { const path = document.createElementNS(SVG_NS, 'path'); path.setAttribute('d', data); svg.appendChild(path); });
-    return svg;
-  }
-
   function renderHistory() {
     const segments = workoutSession ? workoutSession.completedSegments.slice() : [];
     if (workoutSession && workoutSession.currentSegment && workoutSession.currentSegment.status === 'completed') {
-      const snapshot = sessionSnapshot(); const current = workoutSession.currentSegment;
-      if (snapshot.totalLayerProgress >= 5 && !segments.some(segment => segment.id === current.id)) segments.push(current);
+      const current = workoutSession.currentSegment;
+      if (!segments.some(segment => segment.id === current.id)) segments.push(current);
     }
     elements.segmentList.replaceChildren(); elements.history.hidden = segments.length === 0;
     segments.forEach(segment => {
@@ -195,7 +241,10 @@
       const parameters = segment.parameters || {};
       const kind = segment.practiceType === 'water' ? 'water' : Timer.getMovementKind(parameters.speed, workoutSession && workoutSession.sex);
       const icon = document.createElement('span'); icon.className = `segment-type-icon ${kind}`;
-      icon.setAttribute('aria-label', kind === 'water' ? 'Вода' : kind === 'running' ? 'Бег' : 'Ходьба'); icon.appendChild(svgIcon(kind));
+      icon.setAttribute('aria-label', kind === 'water' ? 'Вода' : kind === 'running' ? 'Бег' : 'Ходьба');
+      const iconImage = document.createElement('img');
+      iconImage.src = HISTORY_ICON_SOURCES[kind]; iconImage.alt = ''; iconImage.decoding = 'async';
+      iconImage.width = 64; iconImage.height = 64; icon.appendChild(iconImage);
       const copy = document.createElement('span'); copy.className = 'segment-copy';
       const primary = document.createElement('span'); primary.className = 'segment-primary';
       primary.textContent = `${segment.segmentNumber} отрезок · ${layerText(segment.segmentLayers || segment.targetLayers)} · ${formatSegmentDuration(segment.plannedDurationMs)}`;
@@ -203,6 +252,11 @@
       secondary.textContent = segment.practiceType === 'move'
         ? `${Number(parameters.speed)} км/ч · ${Timer.formatPace(parameters.speed)}` : `${parameters.temperature} °C`;
       copy.append(primary, secondary);
+      if (segment.overtimeDurationMs > 0) {
+        const overtime = document.createElement('span'); overtime.className = 'segment-overtime';
+        overtime.textContent = `Сверх ${segment.segmentNumber} отрезка · +${formatLayerAmount(segment.overtimeLayers)} слоя · ${formatSegmentDuration(segment.overtimeDurationMs)}`;
+        copy.appendChild(overtime);
+      }
       const check = document.createElement('span'); check.className = 'segment-check'; check.setAttribute('aria-label', 'Завершён'); check.textContent = '✓';
       item.append(icon, copy, check); elements.segmentList.appendChild(item);
     });
@@ -218,7 +272,9 @@
     elements.status.textContent = configuring ? 'Настройте следующий участок' : 'Настройте первый участок';
     elements.time.textContent = '00:00:00';
     elements.cumulative.textContent = Timer.formatElapsed(snapshot ? snapshot.cumulativeElapsedMs : 0);
-    elements.progress.style.strokeDashoffset = String(circumference);
+    elements.overtime.hidden = true; elements.overtime.textContent = '';
+    setTimerProgress(0);
+    setTimerBackdrop(descriptor || (pendingSex ? practiceOptions(activePractice()) : null));
     renderLayers({status: 'configuring', completedLayers, layerBarPercent: completedLayers / 5 * 100,
       currentLayer: completedLayers >= 5 ? 5 : Math.floor(completedLayers) + 1}, target);
     elements.pause.hidden = true; elements.resume.hidden = true; elements.reset.hidden = !workoutSession; elements.next.hidden = true;
@@ -228,36 +284,55 @@
   function stopVisualUpdates() { if (renderInterval !== null) window.clearInterval(renderInterval); renderInterval = null; }
   function ensureVisualUpdates() {
     stopVisualUpdates();
-    if (workoutSession && workoutSession.sessionStatus === 'running') renderInterval = window.setInterval(() => refresh(Date.now()), 250);
+    if (workoutSession && ['running', 'overtime_running'].includes(workoutSession.sessionStatus)) {
+      renderInterval = window.setInterval(() => refresh(Date.now()), 250);
+    }
   }
 
   function refresh(now) {
     if (!workoutSession || workoutSession.sessionStatus === 'configuring_next_segment') { renderIdle(); return; }
     const previousStatus = workoutSession.sessionStatus;
     workoutSession = Timer.syncWorkoutSession(workoutSession, now);
-    if (workoutSession.sessionStatus !== previousStatus) { persistSession(); stopVisualUpdates(); }
+    if (workoutSession.sessionStatus !== previousStatus) {
+      persistSession();
+      if (!['running', 'overtime_running'].includes(workoutSession.sessionStatus)) stopVisualUpdates();
+    }
     const snapshot = Timer.getWorkoutSnapshot(workoutSession, now);
     const segment = workoutSession.currentSegment; const current = snapshot.currentSegment;
     elements.practice.textContent = `Отрезок ${segment.segmentNumber} · ${segment.practiceType === 'water' ? 'Вода' : 'Ходьба/бег'}`;
     elements.status.textContent = snapshot.sessionStatus === 'running'
       ? `Идёт ${current.currentLayer}-й слой · цель ${current.targetCumulativeLayers} из 5`
-      : snapshot.sessionStatus === 'paused' ? `Пауза · ${current.currentLayer}-й слой · цель ${current.targetCumulativeLayers} из 5` : 'Отрезок завершён';
+      : snapshot.sessionStatus === 'paused'
+        ? `Пауза · ${current.currentLayer}-й слой · цель ${current.targetCumulativeLayers} из 5`
+        : snapshot.sessionStatus === 'overtime_running' ? 'Идёт дополнительное очищение' : 'Отрезок завершён';
     elements.time.textContent = Timer.formatRemaining(current.remainingMs);
     elements.cumulative.textContent = Timer.formatElapsed(snapshot.cumulativeElapsedMs);
-    elements.progress.style.strokeDashoffset = String(circumference * (1 - current.progress));
+    const overtimeDurationMs = current.overtimeDurationMs || 0;
+    elements.overtime.hidden = overtimeDurationMs <= 0;
+    elements.overtime.textContent = overtimeDurationMs > 0
+      ? `Дополнительное очищение: +${formatLayerAmount(current.overtimeLayers)} слоя · ${formatSegmentDuration(overtimeDurationMs)}`
+      : '';
+    setTimerProgress(current.progress);
+    setTimerBackdrop(segment);
     renderLayers(current, current.targetCumulativeLayers);
     elements.pause.hidden = snapshot.sessionStatus !== 'running'; elements.resume.hidden = snapshot.sessionStatus !== 'paused'; elements.reset.hidden = false;
+    const overtimeRunning = snapshot.sessionStatus === 'overtime_running';
     const allLayersCompleted = snapshot.sessionStatus === 'segment_completed' && snapshot.totalLayerProgress >= 5;
     elements.next.hidden = false; elements.next.disabled = allLayersCompleted;
     elements.nextLabel.textContent = allLayersCompleted ? allLayersMessage : 'Следующий отрезок';
-    elements.next.classList.toggle('secondary', snapshot.sessionStatus !== 'segment_completed' || allLayersCompleted);
-    elements.next.title = allLayersCompleted ? allLayersMessage : snapshot.sessionStatus === 'segment_completed' ? 'Настроить следующий отрезок' : warningMessage;
+    elements.next.classList.toggle('secondary', !overtimeRunning || allLayersCompleted);
+    elements.nextIcon.src = overtimeRunning ? './assets/button-next-active.webp' : './assets/button-next.webp';
+    elements.next.title = allLayersCompleted ? allLayersMessage : overtimeRunning ? 'Зафиксировать отрезок и настроить следующий' : warningMessage;
     updateParameterSummary(segment); renderHistory();
   }
 
   function updateModalStartState() {
     if (elements.modal.hidden) return;
     elements.start.disabled = !canConfigure() || (!workoutSession && !pendingSex) || remainingLayerCapacity() <= 0;
+  }
+
+  function handleReturn() {
+    refresh(Date.now());
   }
 
   function configureModal(mode) {
@@ -285,15 +360,21 @@
   }
 
   function prepareNextSegment() {
-    const result = Timer.requestNextSegment(workoutSession, Date.now());
-    if (!result.allowed) { showLockedWarning(result.reason === 'all_layers_completed' ? allLayersMessage : warningMessage); return false; }
+    const now = Date.now();
+    const result = Timer.requestNextSegment(workoutSession, now);
+    if (!result.allowed) {
+      if (result.reason === 'all_layers_completed') {
+        workoutSession = result.session; persistSession(); stopVisualUpdates(); refresh(now);
+      }
+      showLockedWarning(result.reason === 'all_layers_completed' ? allLayersMessage : warningMessage); return false;
+    }
     workoutSession = result.session; persistSession(); stopVisualUpdates(); limitLayerSelectors(remainingLayerCapacity());
     restoreControls(workoutSession.draftSegment); refresh(Date.now()); return true;
   }
 
   function openParameters() {
     if (!workoutSession) { limitLayerSelectors(5); updateWater(); updateMove(); showModal('editable'); return; }
-    if (workoutSession.sessionStatus === 'running' || workoutSession.sessionStatus === 'paused') {
+    if (['running', 'paused', 'overtime_running'].includes(workoutSession.sessionStatus)) {
       restoreControls(workoutSession.currentSegment); showModal('locked'); return;
     }
     if (workoutSession.sessionStatus === 'segment_completed' && !prepareNextSegment()) return;
@@ -316,12 +397,32 @@
     if (workoutSession && workoutSession.sessionStatus === 'configuring_next_segment') {
       workoutSession = Timer.updateDraftSegment(workoutSession, draftOptions(), Date.now()); persistSession(); refresh(Date.now());
     }
+    setTimerBackdrop(workoutSession ? workoutSession.draftSegment : pendingSex ? practiceOptions(activePractice()) : null);
     updateModalStartState();
   }
 
   function reset() {
     stopVisualUpdates(); workoutSession = null; pendingSex = null; Timer.clearWorkoutSession(storage);
     limitLayerSelectors(5); setConfigurationEnabled(true); setSex(null); refresh(Date.now()); openParameters();
+  }
+
+  function showResetConfirmation() {
+    resetReturnFocus = document.activeElement;
+    elements.resetConfirmation.hidden = false;
+    document.body.classList.add('modal-open');
+    elements.resetConfirmationCancel.focus();
+  }
+
+  function hideResetConfirmation(restoreFocus) {
+    elements.resetConfirmation.hidden = true;
+    document.body.classList.remove('modal-open');
+    if (restoreFocus !== false && resetReturnFocus && typeof resetReturnFocus.focus === 'function') resetReturnFocus.focus();
+    resetReturnFocus = null;
+  }
+
+  function confirmReset() {
+    hideResetConfirmation(false);
+    reset();
   }
 
   function showLockedWarning(message) {
@@ -335,8 +436,10 @@
   }
 
   function trapModalFocus(event) {
-    if (elements.modal.hidden || event.key !== 'Tab') return;
-    const focusable = Array.from(elements.modal.querySelectorAll('button:not([disabled]),select:not([disabled])'));
+    if (event.key !== 'Tab') return;
+    const activeDialog = !elements.resetConfirmation.hidden ? elements.resetConfirmation : !elements.modal.hidden ? elements.modal : null;
+    if (!activeDialog) return;
+    const focusable = Array.from(activeDialog.querySelectorAll('button:not([disabled]),select:not([disabled])'));
     if (!focusable.length) return;
     const first = focusable[0]; const last = focusable[focusable.length - 1];
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
@@ -344,22 +447,28 @@
   }
 
   elements.start.addEventListener('click', startSegment); elements.pause.addEventListener('click', pause);
-  elements.resume.addEventListener('click', resume); elements.reset.addEventListener('click', reset);
+  elements.resume.addEventListener('click', resume); elements.reset.addEventListener('click', showResetConfirmation);
   elements.next.addEventListener('click', nextSegment); elements.parameterToggle.addEventListener('click', openParameters);
   elements.modalClose.addEventListener('click', closeModal);
   elements.modal.addEventListener('click', event => { if (event.target === elements.modal) closeModal(); });
   elements.sexButtons.forEach(button => button.addEventListener('click', () => setSex(button.dataset.sex)));
   elements.warningClose.addEventListener('click', hideWarning);
   elements.warning.addEventListener('click', event => { if (event.target === elements.warning) hideWarning(); });
+  elements.resetConfirmationCancel.addEventListener('click', () => hideResetConfirmation(true));
+  elements.resetConfirmationConfirm.addEventListener('click', confirmReset);
+  elements.resetConfirmation.addEventListener('click', event => {
+    if (event.target === elements.resetConfirmation) hideResetConfirmation(true);
+  });
   document.addEventListener('keydown', event => {
     trapModalFocus(event);
     if (event.key !== 'Escape') return;
-    if (!elements.warning.hidden) hideWarning(); else if (!elements.modal.hidden) closeModal();
+    if (!elements.resetConfirmation.hidden) hideResetConfirmation(true);
+    else if (!elements.warning.hidden) hideWarning(); else if (!elements.modal.hidden) closeModal();
   });
   document.querySelectorAll('select').forEach(element => element.addEventListener('change', updateDraftFromControls));
   document.querySelectorAll('.tab').forEach(element => element.addEventListener('click', () => window.setTimeout(updateDraftFromControls, 0)));
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(Date.now()); });
-  window.addEventListener('pageshow', () => refresh(Date.now())); window.addEventListener('focus', () => refresh(Date.now()));
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) handleReturn(); });
+  window.addEventListener('pageshow', handleReturn); window.addEventListener('focus', handleReturn);
 
   setSex(pendingSex);
   const descriptor = workoutSession ? workoutSession.currentSegment || workoutSession.draftSegment : null;

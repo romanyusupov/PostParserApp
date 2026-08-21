@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'easypracticecalc-';
-const CACHE_NAME = `${CACHE_PREFIX}2026-08-21-v7`;
+const CACHE_NAME = `${CACHE_PREFIX}2026-08-21-v12`;
 const ASSETS = [
   './',
   './index.html',
@@ -8,7 +8,19 @@ const ASSETS = [
   './manifest.webmanifest',
   './icon-180.png',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './assets/history-running.webp',
+  './assets/history-walking.webp',
+  './assets/history-water.webp',
+  './assets/timer-move-female.webp',
+  './assets/timer-move-male.webp',
+  './assets/timer-water-female.webp',
+  './assets/timer-water-male.webp',
+  './assets/button-play.webp',
+  './assets/button-pause.webp',
+  './assets/button-reset.webp',
+  './assets/button-next.webp',
+  './assets/button-next-active.webp'
 ];
 
 self.addEventListener('install', event => {

@@ -119,18 +119,19 @@ test('Next after completion moves one completed segment to history and opens seg
   assert.equal(result.session.draftSegment.segmentNumber, 2);
 });
 
-test('Completion while closed is detected from absolute end timestamp', () => {
-  const restored = Timer.syncWorkoutSession(start(), 1_000 + DURATION + 3_600_000);
+test('Completion while closed finalizes overtime from the absolute planned end timestamp', () => {
+  const restored = Timer.finalizeWorkoutOvertime(start(), 1_000 + DURATION + 3_600_000);
   assert.equal(restored.sessionStatus, 'segment_completed');
-  assert.equal(restored.currentSegment.actualElapsedMs, DURATION);
+  assert.equal(restored.currentSegment.actualElapsedMs, DURATION + 3_600_000);
+  assert.equal(restored.currentSegment.overtimeDurationMs, 3_600_000);
   assert.equal(next(restored, 1_000 + DURATION + 3_600_000).allowed, true);
 });
 
-test('Waiting after 00:00 is excluded from history and cumulative time', () => {
+test('Waiting after 00:00 is included once in history and cumulative time', () => {
   const completed = finish(start(), 1_000 + DURATION + 600_000);
   const configured = next(completed, 1_000 + DURATION + 600_000).session;
-  assert.equal(configured.completedSegments[0].actualElapsedMs, DURATION);
-  assert.equal(Timer.getWorkoutSnapshot(configured, 99_000_000).cumulativeElapsedMs, DURATION);
+  assert.equal(configured.completedSegments[0].actualElapsedMs, DURATION + 600_000);
+  assert.equal(Timer.getWorkoutSnapshot(configured, 99_000_000).cumulativeElapsedMs, DURATION + 600_000);
 });
 
 test('Cumulative time is completed durations plus current active elapsed', () => {
@@ -260,16 +261,16 @@ test('Reload restores a running second segment at cumulative depth 1.4', () => {
   assert.equal(Timer.getWorkoutSnapshot(loaded, 2_000_000 + DURATION * 0.4).totalLayerProgress, 1.4);
 });
 
-test('A second segment completed while PWA is closed restores at cumulative layer 2', () => {
+test('A second segment reaching zero while PWA is closed restores with live overtime', () => {
   const store = storage();
   let session = next(finish(start(1_000), 1_000 + DURATION), 1_000 + DURATION).session;
   session = Timer.startWorkoutSegment(session, options({segmentId: 'segment-2'}), 2_000_000).session;
   Timer.saveWorkoutSession(store, session);
   const reopened = Timer.loadWorkoutSession(store, 2_000_000 + DURATION + 3_600_000);
   const snapshot = Timer.getWorkoutSnapshot(reopened, 2_000_000 + DURATION + 3_600_000);
-  assert.equal(reopened.sessionStatus, 'segment_completed');
-  assert.equal(snapshot.totalLayerProgress, 2);
-  assert.equal(snapshot.cumulativeElapsedMs, DURATION * 2);
+  assert.equal(reopened.sessionStatus, 'overtime_running');
+  assert.equal(snapshot.totalLayerProgress, 2 + 3_600_000 / DURATION);
+  assert.equal(snapshot.cumulativeElapsedMs, DURATION * 2 + 3_600_000);
 });
 
 test('Existing v2 sessions without segmentLayers migrate cumulatively without timer loss', () => {
@@ -323,11 +324,11 @@ test('Reload preserves paused segment and keeps Next blocked', () => {
   assert.equal(next(loaded, 9_000_000).allowed, false);
 });
 
-test('Reload converts elapsed running segment to completed and allows Next', () => {
+test('Reload converts elapsed running segment to live overtime and allows Next', () => {
   const store = storage();
   Timer.saveWorkoutSession(store, start());
   const loaded = Timer.loadWorkoutSession(store, 1_000 + DURATION + 1);
-  assert.equal(loaded.sessionStatus, 'segment_completed');
+  assert.equal(loaded.sessionStatus, 'overtime_running');
   assert.equal(next(loaded, 1_000 + DURATION + 1).allowed, true);
 });
 
@@ -419,4 +420,198 @@ test('Water segment keeps its temperature in completed history', () => {
   const history = next(finish(water, 1_000 + DURATION), 1_000 + DURATION).session.completedSegments;
   assert.equal(history[0].practiceType, 'water');
   assert.equal(history[0].parameters.temperature, '25');
+});
+
+test('Fifteen planned minutes plus seven and a half overtime minutes equal one and a half layers', () => {
+  const duration = 15 * 60_000;
+  const beganAt = 10_000;
+  const session = start(beganAt, {durationMs: duration});
+  const finalized = Timer.finalizeWorkoutOvertime(session, beganAt + duration + 7.5 * 60_000);
+  const snapshot = Timer.getWorkoutSnapshot(finalized, beganAt + duration + 7.5 * 60_000);
+  assert.equal(finalized.currentSegment.overtimeDurationMs, 7.5 * 60_000);
+  assert.equal(finalized.currentSegment.overtimeLayers, 0.5);
+  assert.equal(snapshot.totalLayerProgress, 1.5);
+  assert.equal(snapshot.cumulativeElapsedMs, duration + 7.5 * 60_000);
+});
+
+test('The next segment starts from fractional layer progress left by overtime', () => {
+  const duration = 15 * 60_000;
+  const beganAt = 10_000;
+  const finalized = Timer.finalizeWorkoutOvertime(start(beganAt, {durationMs: duration}), beganAt + duration * 1.5);
+  let session = next(finalized, beganAt + duration * 1.5).session;
+  session = Timer.startWorkoutSegment(session, options({segmentId: 'segment-2', durationMs: duration}), 2_000_000).session;
+  const snapshot = Timer.getWorkoutSnapshot(session, 2_000_000);
+  assert.equal(snapshot.completedLayers, 1.5);
+  assert.equal(snapshot.currentSegment.currentLayer, 2);
+  assert.equal(snapshot.currentSegment.layerBarPercent, 30);
+});
+
+test('New segment parameters cannot recalculate a previous segment overtime', () => {
+  const duration = 15 * 60_000;
+  const beganAt = 10_000;
+  const finalized = Timer.finalizeWorkoutOvertime(start(beganAt, {durationMs: duration}), beganAt + duration * 1.5);
+  let session = next(finalized, beganAt + duration * 1.5).session;
+  session = Timer.startWorkoutSegment(session, options({
+    segmentId: 'segment-2', durationMs: 40 * 60_000,
+    parameters: {layer: '1', speed: '4.0'}
+  }), 2_000_000).session;
+  assert.equal(session.completedSegments[0].plannedDurationMs, duration);
+  assert.equal(session.completedSegments[0].overtimeDurationMs, duration / 2);
+  assert.equal(session.completedSegments[0].overtimeLayers, 0.5);
+});
+
+test('Returning after hidden wall-clock time finalizes overtime from timestamps', () => {
+  const duration = 15 * 60_000;
+  const beganAt = 10_000;
+  const returnedAt = beganAt + duration + 123_456;
+  const finalized = Timer.finalizeWorkoutOvertime(start(beganAt, {durationMs: duration}), returnedAt);
+  assert.equal(finalized.currentSegment.plannedEndAt, beganAt + duration);
+  assert.equal(finalized.currentSegment.overtimeDurationMs, 123_456);
+  assert.equal(finalized.currentSegment.overtimeFinalizedAt, returnedAt);
+});
+
+test('Reload restores live overtime without finalizing it', () => {
+  const store = storage();
+  const duration = 15 * 60_000;
+  const beganAt = 10_000;
+  Timer.saveWorkoutSession(store, start(beganAt, {durationMs: duration}));
+  const returnedAt = beganAt + duration + 90_000;
+  const loaded = Timer.loadWorkoutSession(store, returnedAt);
+  const persisted = JSON.parse(store.getItem(Timer.SESSION_STORAGE_KEY));
+  const snapshot = Timer.getWorkoutSnapshot(loaded, returnedAt);
+  assert.equal(loaded.sessionStatus, 'overtime_running');
+  assert.equal(snapshot.currentSegment.overtimeDurationMs, 90_000);
+  assert.equal(persisted.sessionStatus, 'overtime_running');
+  assert.equal(persisted.currentSegment.overtimeFinalizedAt, null);
+});
+
+test('Repeated return synchronization never counts overtime twice', () => {
+  const duration = 15 * 60_000;
+  const beganAt = 10_000;
+  const returnedAt = beganAt + duration + 90_000;
+  const first = Timer.finalizeWorkoutOvertime(start(beganAt, {durationMs: duration}), returnedAt);
+  const second = Timer.finalizeWorkoutOvertime(first, returnedAt + 600_000);
+  assert.equal(second.currentSegment.overtimeDurationMs, 90_000);
+  assert.equal(second.currentSegment.actualElapsedMs, duration + 90_000);
+  assert.equal(second.currentSegment.overtimeFinalizedAt, returnedAt);
+});
+
+test('Pause shifts the planned end and paused time does not become overtime', () => {
+  const duration = 15 * 60_000;
+  const beganAt = 10_000;
+  const pausedAt = beganAt + 5 * 60_000;
+  const resumedAt = pausedAt + 20 * 60_000;
+  let session = Timer.pauseWorkout(start(beganAt, {durationMs: duration}), pausedAt);
+  session = Timer.resumeWorkout(session, resumedAt);
+  const correctedEnd = resumedAt + 10 * 60_000;
+  const finalized = Timer.finalizeWorkoutOvertime(session, correctedEnd + 60_000);
+  assert.equal(finalized.currentSegment.plannedEndAt, correctedEnd);
+  assert.equal(finalized.currentSegment.overtimeDurationMs, 60_000);
+});
+
+test('Overtime may contribute more than one full layer', () => {
+  const duration = 15 * 60_000;
+  const beganAt = 10_000;
+  const finalized = Timer.finalizeWorkoutOvertime(start(beganAt, {durationMs: duration}), beganAt + duration + 20 * 60_000);
+  assert.ok(Math.abs(finalized.currentSegment.overtimeLayers - 4 / 3) < 1e-12);
+  assert.ok(Math.abs(finalized.currentSegment.actualLayers - 7 / 3) < 1e-12);
+});
+
+test('Reset storage clears a session that contains finalized overtime', () => {
+  const store = storage();
+  const duration = 15 * 60_000;
+  const session = Timer.finalizeWorkoutOvertime(start(10_000, {durationMs: duration}), 10_000 + duration + 60_000);
+  Timer.saveWorkoutSession(store, session);
+  Timer.clearWorkoutSession(store);
+  assert.equal(store.getItem(Timer.SESSION_STORAGE_KEY), null);
+  assert.equal(Timer.loadWorkoutSession(store, 99_000_000), null);
+});
+
+test('Finalized overtime contributes to cumulative time exactly once across the next segment', () => {
+  const duration = 15 * 60_000;
+  const beganAt = 10_000;
+  const returnedAt = beganAt + duration + 90_000;
+  let session = next(Timer.finalizeWorkoutOvertime(start(beganAt, {durationMs: duration}), returnedAt), returnedAt).session;
+  session = Timer.startWorkoutSegment(session, options({segmentId: 'segment-2', durationMs: duration}), 2_000_000).session;
+  const snapshot = Timer.getWorkoutSnapshot(session, 2_000_000 + 60_000);
+  assert.equal(snapshot.cumulativeElapsedMs, duration + 90_000 + 60_000);
+  assert.equal(session.completedSegments[0].actualElapsedMs, duration + 90_000);
+});
+
+test('Live overtime keeps growing after repeated return and focus-style synchronization', () => {
+  const duration = 15 * 60_000;
+  const beganAt = 10_000;
+  let session = Timer.syncWorkoutSession(start(beganAt, {durationMs: duration}), beganAt + duration + 21_000);
+  const first = Timer.getWorkoutSnapshot(session, beganAt + duration + 21_000);
+  session = Timer.syncWorkoutSession(session, beganAt + duration + 60_000);
+  const second = Timer.getWorkoutSnapshot(session, beganAt + duration + 60_000);
+  assert.equal(session.sessionStatus, 'overtime_running');
+  assert.equal(first.currentSegment.overtimeDurationMs, 21_000);
+  assert.equal(second.currentSegment.overtimeDurationMs, 60_000);
+  assert.equal(session.currentSegment.overtimeFinalizedAt, null);
+});
+
+test('A later visibility return derives all overtime from plannedEndAt', () => {
+  const duration = 15 * 60_000;
+  const beganAt = 10_000;
+  let session = Timer.syncWorkoutSession(start(beganAt, {durationMs: duration}), beganAt + duration + 60_000);
+  session = Timer.syncWorkoutSession(session, beganAt + duration + 5 * 60_000);
+  const snapshot = Timer.getWorkoutSnapshot(session, beganAt + duration + 5 * 60_000);
+  assert.equal(snapshot.currentSegment.overtimeDurationMs, 5 * 60_000);
+});
+
+test('Next is the only boundary that freezes live overtime', () => {
+  const duration = 15 * 60_000;
+  const beganAt = 10_000;
+  const pressedAt = beganAt + duration + 7.5 * 60_000;
+  const live = Timer.syncWorkoutSession(start(beganAt, {durationMs: duration}), beganAt + duration + 21_000);
+  const configured = next(live, pressedAt).session;
+  const completed = configured.completedSegments[0];
+  assert.equal(completed.overtimeDurationMs, 7.5 * 60_000);
+  assert.equal(completed.overtimeLayers, 0.5);
+  assert.equal(completed.overtimeFinalizedAt, pressedAt);
+  assert.equal(Timer.getWorkoutSnapshot(configured, pressedAt + 60 * 60_000).completedElapsedMs, duration * 1.5);
+});
+
+test('Live overtime advances fractional layer progress before Next', () => {
+  const duration = 15 * 60_000;
+  const beganAt = 10_000;
+  const session = Timer.syncWorkoutSession(start(beganAt, {durationMs: duration}), beganAt + duration);
+  const snapshot = Timer.getWorkoutSnapshot(session, beganAt + duration + 7.5 * 60_000);
+  assert.equal(snapshot.currentSegment.overtimeLayers, 0.5);
+  assert.equal(snapshot.totalLayerProgress, 1.5);
+  assert.equal(snapshot.currentSegment.currentLayer, 2);
+  assert.equal(snapshot.layerBarPercent, 30);
+});
+
+test('Reloaded overtime continues growing and cumulative time includes it once', () => {
+  const store = storage();
+  const duration = 15 * 60_000;
+  const beganAt = 10_000;
+  const firstReturn = beganAt + duration + 3 * 60_000;
+  const live = Timer.syncWorkoutSession(start(beganAt, {durationMs: duration}), firstReturn);
+  Timer.saveWorkoutSession(store, live);
+  const secondReturn = firstReturn + 5 * 60_000;
+  const reloaded = Timer.loadWorkoutSession(store, secondReturn);
+  const snapshot = Timer.getWorkoutSnapshot(reloaded, secondReturn);
+  assert.equal(reloaded.sessionStatus, 'overtime_running');
+  assert.equal(snapshot.currentSegment.overtimeDurationMs, 8 * 60_000);
+  assert.equal(snapshot.cumulativeElapsedMs, duration + 8 * 60_000);
+  assert.equal(reloaded.currentSegment.overtimeFinalizedAt, null);
+});
+
+test('A session frozen by the previous focus behavior resumes as live overtime', () => {
+  const store = storage();
+  const duration = 15 * 60_000;
+  const beganAt = 10_000;
+  const oldReturn = beganAt + duration + 60_000;
+  const previouslyFrozen = Timer.finalizeWorkoutOvertime(start(beganAt, {durationMs: duration}), oldReturn);
+  previouslyFrozen.currentSegment.completedAt = beganAt + duration;
+  Timer.saveWorkoutSession(store, previouslyFrozen);
+  const newReturn = oldReturn + 4 * 60_000;
+  const restored = Timer.loadWorkoutSession(store, newReturn);
+  const snapshot = Timer.getWorkoutSnapshot(restored, newReturn);
+  assert.equal(restored.sessionStatus, 'overtime_running');
+  assert.equal(snapshot.currentSegment.overtimeDurationMs, 5 * 60_000);
+  assert.equal(restored.currentSegment.overtimeFinalizedAt, null);
 });

@@ -14,6 +14,7 @@ Production URL: `/easypracticecalc/`.
 - `timer_logic.test.js` — автономные Node.js-тесты модели времени.
 - `workout_session.test.js` — тесты Workout Session, запрета Next и migration старого состояния.
 - `manifest.webmanifest` и `icon-*.png` — PWA manifest и иконки.
+- `assets/` — оптимизированные локальные WebP-фоны кругового таймера и иконки истории; внешние изображения во время работы не загружаются.
 - `sw.js` — собственный offline cache, ограниченный scope `/easypracticecalc/`.
 
 ## Архитектура Workout Session
@@ -70,6 +71,8 @@ Persistence отделён функциями `loadWorkoutSession()`, `saveWorko
 - старые Session без пола — нейтральный fallback 7,2 км/ч.
 
 Источник порогов: Gill N. et al., *The effect of sex, stature, and limb length on the preferred walk-to-run transition speed*, Gait & Posture, 2022, PMID 35994952. Классификация — усреднённая эвристика только для UI-иконки ходьбы/бега. Она не является медицинским выводом и не меняет формулы, скорость, дистанцию или длительность практики.
+
+Для завершённых отрезков используются отдельные локальные изображения воды, ходьбы и бега. Внутри кругового таймера фон выбирается по типу текущего отрезка и сохранённому полу Workout Session: movement/water × male/female. Для legacy Session без пола сохраняется нейтральный градиент, чтобы не показывать неверный персонаж. Фоны затемняются декоративным overlay, поэтому countdown остаётся контрастным. Все семь изображений входят в собственный offline-cache PWA.
 
 ## Требования к hosting
 

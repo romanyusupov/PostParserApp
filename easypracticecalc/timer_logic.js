@@ -15,6 +15,7 @@
   const VALID_SESSION_STATUSES = new Set([
     'running',
     'paused',
+    'overtime_running',
     'segment_completed',
     'configuring_next_segment'
   ]);
@@ -200,15 +201,42 @@
     return Number(value && value.segmentLayers != null ? value.segmentLayers : value && value.targetLayers);
   }
 
+  function calculateLayersForDuration(segment, durationMs) {
+    const plannedDurationMs = Number(segment && segment.plannedDurationMs);
+    const plannedLayers = segmentLayersFrom(segment);
+    const elapsedMs = Math.max(0, Number(durationMs) || 0);
+    if (!Number.isFinite(plannedDurationMs) || plannedDurationMs <= 0) return 0;
+    if (!Number.isFinite(plannedLayers) || plannedLayers <= 0) return 0;
+    return plannedLayers * elapsedMs / plannedDurationMs;
+  }
+
   function normalizeSegment(value) {
     if (!value || typeof value !== 'object' || !VALID_PRACTICES.has(value.practiceType)) return null;
-    if (!['running', 'paused', 'completed'].includes(value.status)) return null;
+    if (!['running', 'paused', 'overtime_running', 'completed'].includes(value.status)) return null;
     const plannedDurationMs = Number(value.plannedDurationMs);
     const targetLayers = segmentLayersFrom(value);
     const segmentNumber = Number(value.segmentNumber);
     if (!Number.isFinite(plannedDurationMs) || plannedDurationMs <= 0) return null;
     if (!Number.isInteger(targetLayers) || targetLayers < 1 || targetLayers > 5) return null;
     if (!Number.isInteger(segmentNumber) || segmentNumber < 1) return null;
+
+    const completedAt = Number(value.completedAt) || null;
+    const plannedEndAt = Number(value.plannedEndAt) || Number(value.endAt) || completedAt;
+    const hasOvertimeFinalization = Object.prototype.hasOwnProperty.call(value, 'overtimeFinalizedAt');
+    const overtimeFinalizedAt = hasOvertimeFinalization
+      ? (Number(value.overtimeFinalizedAt) || null)
+      : (value.status === 'completed' ? completedAt : null);
+    const overtimeDurationMs = value.status === 'completed'
+      ? Math.max(0, Number(value.overtimeDurationMs) || 0)
+      : 0;
+    const storedOvertimeLayers = Number(value.overtimeLayers);
+    const overtimeLayers = value.status === 'completed'
+      ? (Number.isFinite(storedOvertimeLayers)
+        ? Math.max(0, storedOvertimeLayers)
+        : calculateLayersForDuration(value, overtimeDurationMs))
+      : 0;
+    const actualElapsedMs = value.status === 'completed' ? plannedDurationMs + overtimeDurationMs : null;
+    const actualLayers = value.status === 'completed' ? targetLayers + overtimeLayers : null;
 
     const segment = {
       id: String(value.id || `segment-${segmentNumber}`),
@@ -220,16 +248,22 @@
         ? Object.assign({}, value.parameters)
         : {},
       plannedDurationMs,
-      actualElapsedMs: value.status === 'completed' ? plannedDurationMs : null,
+      actualElapsedMs,
+      actualLayers,
+      overtimeDurationMs,
+      overtimeLayers,
+      overtimeFinalizedAt,
       status: value.status,
       startedAt: Number(value.startedAt) || null,
       endAt: Number(value.endAt) || null,
+      plannedEndAt,
       remainingMsAtPause: value.remainingMsAtPause == null
         ? null
         : clamp(Number(value.remainingMsAtPause) || 0, 0, plannedDurationMs),
-      completedAt: Number(value.completedAt) || null
+      completedAt
     };
     if (segment.status === 'running' && !segment.endAt) return null;
+    if (segment.status === 'overtime_running' && !segment.plannedEndAt) return null;
     if (segment.status === 'paused' && segment.remainingMsAtPause == null) return null;
     return segment;
   }
@@ -268,6 +302,7 @@
       const requiredSegmentStatus = {
         running: 'running',
         paused: 'paused',
+        overtime_running: 'overtime_running',
         segment_completed: 'completed'
       }[value.sessionStatus];
       if (currentSegment.status !== requiredSegmentStatus || draftSegment) return null;
@@ -301,9 +336,14 @@
       parameters: Object.assign({}, options.parameters || {}),
       plannedDurationMs: durationMs,
       actualElapsedMs: null,
+      actualLayers: null,
+      overtimeDurationMs: 0,
+      overtimeLayers: 0,
+      overtimeFinalizedAt: null,
       status: 'running',
       startedAt: Number(now),
       endAt: Number(now) + durationMs,
+      plannedEndAt: Number(now) + durationMs,
       remainingMsAtPause: null,
       completedAt: null
     };
@@ -321,15 +361,31 @@
     } else {
       remainingMs = 0;
     }
-    const elapsedMs = normalized.plannedDurationMs - remainingMs;
-    const progress = clamp(elapsedMs / normalized.plannedDurationMs, 0, 1);
-    const segmentLayerProgress = clamp(normalized.segmentLayers * progress, 0, normalized.segmentLayers);
+    const plannedElapsedMs = normalized.plannedDurationMs - remainingMs;
+    const liveOvertimeDurationMs = normalized.status === 'overtime_running'
+      ? Math.max(0, Number(now) - normalized.plannedEndAt)
+      : 0;
+    const overtimeDurationMs = normalized.status === 'completed'
+      ? normalized.overtimeDurationMs
+      : liveOvertimeDurationMs;
+    const overtimeLayers = normalized.status === 'completed'
+      ? normalized.overtimeLayers
+      : calculateLayersForDuration(normalized, overtimeDurationMs);
+    const elapsedMs = plannedElapsedMs + overtimeDurationMs;
+    const progress = clamp(plannedElapsedMs / normalized.plannedDurationMs, 0, 1);
+    const segmentLayerProgress = normalized.status === 'completed'
+      ? normalized.actualLayers
+      : calculateLayersForDuration(normalized, plannedElapsedMs) + overtimeLayers;
     const totalLayerProgress = clamp(completedBefore + segmentLayerProgress, 0, 5);
     const targetCumulativeLayers = clamp(completedBefore + normalized.segmentLayers, 0, 5);
     return {
       status: normalized.status === 'running' && remainingMs === 0 ? 'completed' : normalized.status,
       remainingMs,
       elapsedMs,
+      plannedElapsedMs,
+      overtimeDurationMs,
+      overtimeLayers,
+      overtimeFinalizedAt: normalized.overtimeFinalizedAt,
       progress,
       segmentLayers: normalized.segmentLayers,
       segmentLayerProgress,
@@ -337,9 +393,7 @@
       completedLayers: totalLayerProgress,
       totalLayerProgress,
       layerBarPercent: totalLayerProgress / 5 * 100,
-      currentLayer: progress >= 1
-        ? targetCumulativeLayers
-        : Math.min(5, Math.floor(totalLayerProgress) + 1),
+      currentLayer: totalLayerProgress >= 5 ? 5 : Math.floor(totalLayerProgress) + 1,
       targetLayers: normalized.segmentLayers,
       targetCumulativeLayers
     };
@@ -347,14 +401,14 @@
 
   function completedDuration(session) {
     return session.completedSegments.reduce(
-      (total, segment) => total + segment.plannedDurationMs,
+      (total, segment) => total + (segment.actualElapsedMs || segment.plannedDurationMs),
       0
     );
   }
 
   function completedLayerCount(session) {
     return clamp(session.completedSegments.reduce(
-      (total, segment) => total + segment.segmentLayers,
+      (total, segment) => total + (segment.actualLayers == null ? segment.segmentLayers : segment.actualLayers),
       0
     ), 0, 5);
   }
@@ -392,19 +446,68 @@
   function syncWorkoutSession(session, now) {
     const normalized = normalizeWorkoutSession(session);
     if (!normalized || !normalized.currentSegment) return normalized;
+    if (normalized.sessionStatus === 'overtime_running') return normalized;
+    const previousAutomaticFinalization = normalized.sessionStatus === 'segment_completed'
+      && normalized.currentSegment.overtimeFinalizedAt != null
+      && normalized.currentSegment.completedAt !== normalized.currentSegment.overtimeFinalizedAt;
+    if (normalized.sessionStatus === 'segment_completed'
+        && (normalized.currentSegment.overtimeFinalizedAt == null || previousAutomaticFinalization)) {
+      return Object.assign({}, normalized, {
+        sessionStatus: 'overtime_running',
+        currentSegment: Object.assign({}, normalized.currentSegment, {
+          status: 'overtime_running',
+          actualElapsedMs: null,
+          actualLayers: null,
+          overtimeDurationMs: 0,
+          overtimeLayers: 0,
+          overtimeFinalizedAt: null,
+          endAt: null,
+          remainingMsAtPause: 0,
+          completedAt: null
+        }),
+        updatedAt: Number(now)
+      });
+    }
     const snapshot = getSegmentSnapshot(normalized.currentSegment, now);
     if (snapshot.status !== 'completed' || normalized.currentSegment.status === 'completed') return normalized;
-    const completedAt = normalized.currentSegment.endAt || Number(now);
+    const completedAt = normalized.currentSegment.plannedEndAt || normalized.currentSegment.endAt || Number(now);
+    return Object.assign({}, normalized, {
+      sessionStatus: 'overtime_running',
+      currentSegment: Object.assign({}, normalized.currentSegment, {
+        status: 'overtime_running',
+        actualElapsedMs: null,
+        actualLayers: null,
+        overtimeDurationMs: 0,
+        overtimeLayers: 0,
+        overtimeFinalizedAt: null,
+        endAt: null,
+        plannedEndAt: completedAt,
+        remainingMsAtPause: 0,
+        completedAt: null
+      }),
+      updatedAt: Number(now)
+    });
+  }
+
+  function finalizeWorkoutOvertime(session, now) {
+    const normalized = syncWorkoutSession(session, now);
+    if (!normalized || normalized.sessionStatus !== 'overtime_running' || !normalized.currentSegment) return normalized;
+    const finalizedAt = Number(now);
+    const plannedEndAt = normalized.currentSegment.plannedEndAt || normalized.currentSegment.completedAt;
+    const overtimeDurationMs = Math.max(0, finalizedAt - plannedEndAt);
+    const overtimeLayers = calculateLayersForDuration(normalized.currentSegment, overtimeDurationMs);
     return Object.assign({}, normalized, {
       sessionStatus: 'segment_completed',
       currentSegment: Object.assign({}, normalized.currentSegment, {
         status: 'completed',
-        actualElapsedMs: normalized.currentSegment.plannedDurationMs,
-        endAt: null,
-        remainingMsAtPause: 0,
-        completedAt
+        overtimeDurationMs,
+        overtimeLayers,
+        overtimeFinalizedAt: finalizedAt,
+        actualElapsedMs: normalized.currentSegment.plannedDurationMs + overtimeDurationMs,
+        actualLayers: normalized.currentSegment.segmentLayers + overtimeLayers,
+        completedAt: finalizedAt
       }),
-      updatedAt: Number(now)
+      updatedAt: finalizedAt
     });
   }
 
@@ -429,7 +532,8 @@
     if (!normalized || normalized.sessionStatus !== 'configuring_next_segment') {
       return {started: false, reason: 'segment_already_active', session: normalized};
     }
-    if (completedLayerCount(normalized) + segmentLayersFrom(options) > 5) {
+    const remainingLayers = Math.max(0, 5 - completedLayerCount(normalized));
+    if (remainingLayers <= 0 || segmentLayersFrom(options) > Math.ceil(remainingLayers)) {
       return {started: false, reason: 'layer_limit_exceeded', session: normalized};
     }
     const segmentNumber = normalized.draftSegment.segmentNumber;
@@ -454,6 +558,7 @@
       currentSegment: Object.assign({}, normalized.currentSegment, {
         status: 'paused',
         endAt: null,
+        plannedEndAt: null,
         remainingMsAtPause: snapshot.remainingMs
       }),
       updatedAt: Number(now)
@@ -470,6 +575,7 @@
       currentSegment: Object.assign({}, normalized.currentSegment, {
         status: 'running',
         endAt: Number(now) + remainingMs,
+        plannedEndAt: Number(now) + remainingMs,
         remainingMsAtPause: null
       }),
       updatedAt: Number(now)
@@ -477,12 +583,12 @@
   }
 
   function requestNextSegment(session, now) {
-    const normalized = syncWorkoutSession(session, now);
+    const normalized = finalizeWorkoutOvertime(session, now);
     if (!normalized || normalized.sessionStatus !== 'segment_completed') {
       return {allowed: false, reason: 'next_segment_not_allowed', session: normalized};
     }
     const completed = normalized.currentSegment;
-    const totalLayersAfterCurrent = completedLayerCount(normalized) + completed.segmentLayers;
+    const totalLayersAfterCurrent = completedLayerCount(normalized) + completed.actualLayers;
     if (totalLayersAfterCurrent >= 5) {
       return {allowed: false, reason: 'all_layers_completed', session: normalized};
     }
@@ -499,10 +605,10 @@
         draftSegment: {
           segmentNumber: completed.segmentNumber + 1,
           practiceType: completed.practiceType,
-          segmentLayers: Math.min(completed.segmentLayers, 5 - totalLayersAfterCurrent),
-          targetLayers: Math.min(completed.segmentLayers, 5 - totalLayersAfterCurrent),
+          segmentLayers: Math.min(completed.segmentLayers, Math.ceil(5 - totalLayersAfterCurrent)),
+          targetLayers: Math.min(completed.segmentLayers, Math.ceil(5 - totalLayersAfterCurrent)),
           parameters: Object.assign({}, completed.parameters, {
-            layer: String(Math.min(completed.segmentLayers, 5 - totalLayersAfterCurrent))
+            layer: String(Math.min(completed.segmentLayers, Math.ceil(5 - totalLayersAfterCurrent)))
           })
         },
         updatedAt: Number(now)
@@ -517,7 +623,8 @@
       segmentNumber: normalized.draftSegment.segmentNumber
     }));
     if (!nextDraft) return normalized;
-    if (completedLayerCount(normalized) + nextDraft.segmentLayers > 5) return normalized;
+    const remainingLayers = Math.max(0, 5 - completedLayerCount(normalized));
+    if (remainingLayers <= 0 || nextDraft.segmentLayers > Math.ceil(remainingLayers)) return normalized;
     return Object.assign({}, normalized, {draftSegment: nextDraft, updatedAt: Number(now)});
   }
 
@@ -538,9 +645,14 @@
         parameters: Object.assign({}, legacy.parameters),
         plannedDurationMs: legacy.durationMs,
         actualElapsedMs: segmentStatus === 'completed' ? legacy.durationMs : null,
+        actualLayers: segmentStatus === 'completed' ? legacy.targetLayers : null,
+        overtimeDurationMs: 0,
+        overtimeLayers: 0,
+        overtimeFinalizedAt: segmentStatus === 'completed' ? (legacy.updatedAt || Number(now)) : null,
         status: segmentStatus,
         startedAt: legacy.startedAt,
         endAt: legacy.endAt,
+        plannedEndAt: legacy.endAt || (segmentStatus === 'completed' ? (legacy.updatedAt || Number(now)) : null),
         remainingMsAtPause: segmentStatus === 'completed' ? 0 : legacy.remainingMsAtPause,
         completedAt: segmentStatus === 'completed' ? (legacy.updatedAt || Number(now)) : null
       },
@@ -555,7 +667,11 @@
   function loadWorkoutSession(storage, now) {
     try {
       const stored = normalizeWorkoutSession(JSON.parse(storage.getItem(SESSION_STORAGE_KEY)));
-      if (stored) return syncWorkoutSession(stored, now);
+      if (stored) {
+        const restored = syncWorkoutSession(stored, now);
+        if (restored && restored.sessionStatus !== stored.sessionStatus) saveWorkoutSession(storage, restored);
+        return restored;
+      }
       const legacy = loadTimerState(storage);
       if (!legacy) return null;
       const migrated = migrateTimerState(legacy, now);
@@ -614,7 +730,9 @@
     getSegmentSnapshot,
     getWorkoutSnapshot,
     completedLayerCount,
+    calculateLayersForDuration,
     syncWorkoutSession,
+    finalizeWorkoutOvertime,
     startWorkoutSegment,
     pauseWorkout,
     resumeWorkout,
