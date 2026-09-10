@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0804">
+  <meta name="description" content="Быстрый старт по методике Олега Торсунова: ясные практические инструкции для начала.">
+  <title>Быстрый старт — методика Олега Торсунова</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+
+    :root {
+      color-scheme: dark;
+      --amber: #f79a13;
+      --amber-light: #ffb646;
+      --cream: #f4eee5;
+      --muted: #d4cbc0;
+      --line: rgba(239, 144, 34, .22);
+      --page-pad: clamp(24px, 3.25vw, 50px);
+    }
+
+    * { box-sizing: border-box; }
+    html { min-width: 320px; background: #080603; scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100svh;
+      overflow-x: hidden;
+      background: #080603;
+      color: var(--cream);
+      font-family: "Manrope", "Segoe UI", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; }
+
+    .page {
+      position: relative;
+      isolation: isolate;
+      min-height: max(100svh, 760px);
+      overflow: hidden;
+      background:
+        radial-gradient(ellipse at 34% 29%, rgba(100, 58, 13, .18), transparent 31%),
+        linear-gradient(112deg, #080603 0%, #100b05 30%, #0b0703 100%);
+    }
+    .page::before {
+      position: absolute;
+      z-index: 0;
+      inset: 0 0 0 clamp(320px, 32.55vw, 500px);
+      content: "";
+      background: url("/easystart/hero-background.png") center center / cover no-repeat;
+    }
+    .page::after {
+      position: absolute;
+      z-index: 1;
+      inset: 0;
+      pointer-events: none;
+      content: "";
+      background:
+        linear-gradient(90deg, #080603 0%, rgba(8, 6, 3, .97) 24%, rgba(8, 6, 3, .63) 37%, rgba(8, 6, 3, .08) 55%, rgba(8, 6, 3, .02) 78%, rgba(8, 6, 3, .23) 100%),
+        linear-gradient(180deg, rgba(0, 0, 0, .12) 0%, transparent 52%, rgba(11, 6, 2, .12) 68%, rgba(9, 5, 2, .94) 100%);
+    }
+    .top-shade {
+      position: absolute;
+      z-index: 2;
+      inset: 0 0 auto;
+      height: 112px;
+      background: linear-gradient(180deg, rgba(5, 4, 2, .86), rgba(7, 5, 2, .25), transparent);
+      pointer-events: none;
+    }
+
+    .header {
+      position: relative;
+      z-index: 3;
+      display: flex;
+      width: calc(100% - 2 * var(--page-pad));
+      max-width: 1436px;
+      height: 96px;
+      margin: 0 auto;
+      align-items: center;
+      justify-content: space-between;
+      gap: 30px;
+    }
+    .brand { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 12px; }
+    .brand-mark {
+      display: grid;
+      width: 48px;
+      height: 48px;
+      place-items: center;
+      border-radius: 50%;
+      background: linear-gradient(145deg, #ffac24, #ee7d00);
+      color: #100b05;
+      box-shadow: 0 0 24px rgba(241, 129, 0, .08);
+    }
+    .brand-mark svg { width: 35px; height: 35px; fill: none; stroke: currentColor; stroke-width: 5.5; stroke-linecap: round; stroke-linejoin: round; }
+    .brand-name {
+      color: #ff9910;
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 1.35;
+      letter-spacing: .01em;
+      text-transform: uppercase;
+    }
+    .nav { display: flex; align-self: stretch; align-items: center; gap: clamp(24px, 2.3vw, 40px); }
+    .nav a {
+      position: relative;
+      padding: 36px 0 30px;
+      color: #e2dbd2;
+      font-size: 16px;
+      font-weight: 400;
+      white-space: nowrap;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, .62);
+      transition: color .18s ease;
+    }
+    .nav a:hover, .nav a:focus-visible { color: #fff; }
+    .nav .active { color: var(--amber); }
+    .nav .active::after {
+      position: absolute;
+      right: 0;
+      bottom: 28px;
+      left: 0;
+      height: 1px;
+      content: "";
+      background: var(--amber);
+      box-shadow: 0 0 8px rgba(247, 154, 19, .48);
+    }
+    .chevron { display: inline-block; width: 8px; height: 8px; margin: 0 0 3px 9px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); }
+    .account {
+      display: inline-flex;
+      min-width: 144px;
+      min-height: 48px;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 10px 17px;
+      border-radius: 999px;
+      background: linear-gradient(120deg, #ffc251, #ff9814);
+      box-shadow: inset 0 1px rgba(255, 246, 202, .56), 0 8px 22px rgba(0, 0, 0, .22);
+      color: #1d150a;
+      font-size: 17px;
+      font-weight: 700;
+    }
+    .account svg { width: 27px; height: 27px; fill: none; stroke: currentColor; stroke-width: 1.9; }
+
+    .hero {
+      position: relative;
+      z-index: 3;
+      width: calc(100% - 2 * var(--page-pad));
+      max-width: 1436px;
+      margin: 53px auto 0;
+    }
+    .hero-copy { width: min(675px, 46.5vw); }
+    .eyebrow { margin: 0 0 18px; color: var(--amber); font-size: clamp(22px, 1.82vw, 28px); font-weight: 400; line-height: 1.2; }
+    h1 {
+      max-width: 630px;
+      margin: 0;
+      color: #f8f7f5;
+      font-size: clamp(44px, 3.58vw, 55px);
+      font-weight: 800;
+      letter-spacing: -.035em;
+      line-height: 1.14;
+      text-wrap: balance;
+      text-shadow: 0 3px 22px rgba(0, 0, 0, .22);
+    }
+    .lead {
+      max-width: 620px;
+      margin: 20px 0 0;
+      color: #e7dfd4;
+      font-size: clamp(18px, 1.35vw, 21px);
+      font-weight: 400;
+      line-height: 1.52;
+    }
+    .note {
+      max-width: 582px;
+      margin: 28px 0 0;
+      padding: 1px 0 1px 27px;
+      border-left: 1px solid var(--amber);
+      color: #d8d0c6;
+      font-size: 15.5px;
+      font-weight: 400;
+      line-height: 1.67;
+    }
+    .actions { display: flex; align-items: center; gap: 21px; margin-top: 36px; }
+    .button {
+      display: inline-flex;
+      min-height: 72px;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      border: 1px solid #dc8411;
+      border-radius: 16px;
+      padding: 16px 27px;
+      font-size: 17px;
+      font-weight: 600;
+      white-space: nowrap;
+      transition: transform .18s ease, filter .18s ease, background-color .18s ease;
+    }
+    .button:hover, .button:focus-visible { transform: translateY(-2px); filter: brightness(1.08); }
+    .button-primary {
+      min-width: 320px;
+      justify-content: space-between;
+      border-color: #ffb333;
+      background: linear-gradient(120deg, #ffc252, #ff9613);
+      box-shadow: inset 0 1px rgba(255, 247, 211, .66), 0 9px 26px rgba(0, 0, 0, .2);
+      color: #1b1308;
+      font-weight: 700;
+    }
+    .arrow { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .button-secondary { min-width: 323px; background: rgba(30, 17, 6, .44); color: #f2c37d; }
+    .calculator-icon { width: 24px; height: 28px; fill: none; stroke: #f5a62d; stroke-width: 2; }
+    .external { width: 19px; height: 19px; fill: none; stroke: #e5a446; stroke-width: 1.7; }
+
+    .benefits {
+      position: relative;
+      z-index: 3;
+      display: grid;
+      width: calc(100% - 2 * var(--page-pad));
+      min-height: 136px;
+      margin: 59px auto 23px;
+      grid-template-columns: repeat(4, 1fr);
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: linear-gradient(110deg, rgba(16, 10, 5, .72), rgba(25, 13, 4, .53));
+      box-shadow: inset 0 1px rgba(255, 214, 150, .035), 0 18px 50px rgba(0, 0, 0, .14);
+      backdrop-filter: blur(4px);
+    }
+    .benefit { display: grid; min-width: 0; grid-template-columns: 54px 1fr; gap: 14px; align-items: center; padding: 0 34px; }
+    .benefit + .benefit { border-left: 1px solid rgba(227, 141, 36, .18); }
+    .benefit-icon { width: 49px; height: 49px; fill: none; stroke: #f6a13b; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .benefit h2 { margin: 0 0 9px; color: #f0a947; font-size: 16px; font-weight: 600; line-height: 1.25; }
+    .benefit p { margin: 0; color: #cfc5b8; font-size: 14px; line-height: 1.55; }
+
+    @media (max-width: 1180px) {
+      .nav { gap: 20px; }
+      .nav a { font-size: 14px; }
+      .hero-copy { width: 55vw; }
+      .benefit { padding-inline: 22px; grid-template-columns: 45px 1fr; gap: 10px; }
+      .benefit-icon { width: 42px; height: 42px; }
+      .actions { flex-wrap: wrap; gap: 14px; }
+      .button { min-height: 62px; }
+    }
+
+    @media (max-width: 900px) {
+      .page { min-height: 100svh; overflow: visible; }
+      .page::before { inset: 0; background-position: 57% top; }
+      .page::after { background: linear-gradient(90deg, rgba(5, 4, 2, .94), rgba(5, 4, 2, .62) 68%, rgba(5, 4, 2, .3)), linear-gradient(180deg, rgba(0, 0, 0, .12), rgba(6, 4, 2, .3) 36%, #080603 72%); }
+      .header { height: 82px; }
+      .nav { display: none; }
+      .hero { margin-top: 48px; }
+      .hero-copy { width: min(680px, 100%); }
+      h1 { max-width: 590px; }
+      .benefits { margin: 74px auto 24px; grid-template-columns: 1fr 1fr; }
+      .benefit { min-height: 120px; }
+      .benefit:nth-child(3) { border-left: 0; border-top: 1px solid rgba(227, 141, 36, .18); }
+      .benefit:nth-child(4) { border-top: 1px solid rgba(227, 141, 36, .18); }
+    }
+
+    @media (max-width: 620px) {
+      :root { --page-pad: 18px; }
+      .page::before { height: 620px; background-position: 60% top; }
+      .page::after { background: linear-gradient(90deg, rgba(6, 4, 2, .9), rgba(6, 4, 2, .34)), linear-gradient(180deg, rgba(0, 0, 0, .03), rgba(8, 6, 3, .57) 37%, #080603 64%); }
+      .header { height: 74px; }
+      .brand { gap: 9px; }
+      .brand-mark { width: 42px; height: 42px; }
+      .brand-name { font-size: 12px; }
+      .account { min-width: 48px; width: 48px; min-height: 48px; padding: 0; }
+      .account span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      .hero { margin-top: 52px; }
+      .eyebrow { margin-bottom: 14px; font-size: 20px; }
+      h1 { font-size: clamp(36px, 10.7vw, 48px); }
+      .lead { font-size: 17px; }
+      .note { padding-left: 18px; font-size: 14px; }
+      .actions { display: grid; }
+      .button, .button-primary, .button-secondary { width: 100%; min-width: 0; }
+      .benefits { grid-template-columns: 1fr; margin-top: 55px; }
+      .benefit { min-height: 110px; padding: 18px 22px; }
+      .benefit + .benefit { border-top: 1px solid rgba(227, 141, 36, .18); border-left: 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="top-shade" aria-hidden="true"></div>
+    <header class="header">
+      <a class="brand" href="/easystart" aria-label="Олег Торсунов — быстрый старт">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 64 64"><path d="M32 32C21 31 18 21 24 14c6-7 17-4 19 4M32 32c5-10 16-9 21-1 5 9-4 18-13 16M32 32c6 10-1 19-10 20-10 0-14-11-9-19"/></svg>
+        </span>
+        <span class="brand-name">Олег<br>Торсунов</span>
+      </a>
+
+      <nav class="nav" aria-label="Основная навигация">
+        <a class="active" href="/easystart" aria-current="page">Быстрый старт</a>
+        <a href="#method">Методика</a>
+        <a href="#practices">Практики <span class="chevron" aria-hidden="true"></span></a>
+        <a href="/easypracticecalc/">Калькуляторы</a>
+        <a href="#materials">Материалы</a>
+        <a href="#about">Обо мне</a>
+      </nav>
+
+      <a class="account" href="/" aria-label="Перейти в кабинет">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13.5"/><circle cx="16" cy="12" r="4.2"/><path d="M8.5 24c1.1-4 3.8-6 7.5-6s6.4 2 7.5 6"/></svg>
+        <span>Кабинет</span>
+      </a>
+    </header>
+
+    <section class="hero" id="method" aria-labelledby="page-title">
+      <div class="hero-copy">
+        <p class="eyebrow">Легкое вхождение в метод</p>
+        <h1 id="page-title">Быстрый старт<br>по методике<br>Олега Торсунова</h1>
+        <p class="lead">Вода, статические позы, длительное движение<br>и правильное согревание — ясные практические<br>инструкции для начала без сомнений.</p>
+        <p class="note">На этой странице вы за несколько минут поймёте,<br>что делать сначала, когда добавлять следующую практику<br>и как не ошибиться со временем. Вам не нужно быть<br>спортсменом или заранее знать, что такое «слои».<br>Просто следуйте моей методике, которая помогла<br>уже тысячам людей.</p>
+
+        <div class="actions" id="practices">
+          <a class="button button-primary" href="/easystart/water/">
+            <span>Показать, с чего начать</span>
+            <svg class="arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16M14 6l6 6-6 6"/></svg>
+          </a>
+          <a class="button button-secondary" href="/easypracticecalc/">
+            <svg class="calculator-icon" viewBox="0 0 24 28" aria-hidden="true"><rect x="3" y="1.5" width="18" height="25" rx="2.5"/><path d="M7 6.5h10M7 12h2M12 12h2M17 12h.1M7 17h2M12 17h2M17 17h.1M7 22h2M12 22h2M17 22h.1"/></svg>
+            <span>Открыть калькулятор</span>
+            <svg class="external" viewBox="0 0 20 20" aria-hidden="true"><path d="M11 3h6v6M17 3l-8 8M15 11v5H4V5h5"/></svg>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="benefits" id="benefits" aria-label="Преимущества методики">
+      <article class="benefit">
+        <svg class="benefit-icon" viewBox="0 0 50 50" aria-hidden="true"><path d="M25 3C20 11 12 18 10 27c-2 9 5 18 15 19 10-1 17-10 15-19C38 18 30 11 25 3Z"/><path d="M20 36c-3-2-4-5-2-8"/></svg>
+        <div><h2>Просто и понятно</h2><p>Без сложных терминов<br>и запутанных теорий</p></div>
+      </article>
+      <article class="benefit">
+        <svg class="benefit-icon" viewBox="0 0 50 50" aria-hidden="true"><path d="M42 26A18 18 0 1 1 36 12M40 6v9h-9M25 10v16l9 4"/></svg>
+        <div><h2>Постепенно и безопасно</h2><p>Вы добавляете практики<br>в нужное время</p></div>
+      </article>
+      <article class="benefit">
+        <svg class="benefit-icon" viewBox="0 0 50 50" aria-hidden="true"><path d="M25 44 8 27C-3 16 12 2 22 12l3 4 3-4C38 2 53 16 42 27Z"/></svg>
+        <div><h2>Работает на результат</h2><p>Тысячи людей уже улучшили<br>здоровье и качество жизни</p></div>
+      </article>
+      <article class="benefit" id="materials">
+        <svg class="benefit-icon" viewBox="0 0 50 50" aria-hidden="true"><path d="M25 3c6 5 11 5 17 6v15c0 10-6 17-17 22C14 41 8 34 8 24V9c6-1 11-1 17-6Z"/><path d="m17 25 6 6 11-12"/></svg>
+        <div><h2>Проверенная методика</h2><p>На основе многолетнего опыта<br>и древних знаний</p></div>
+      </article>
+    </section>
+    <span id="about" hidden></span>
+  </main>
+</body>
+</html>
